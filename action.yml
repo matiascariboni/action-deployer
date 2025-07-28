@@ -2,6 +2,9 @@ name: Deployer
 description: Composite action to deploy projects on different AWS services
 
 inputs:
+  METHOD:
+    required: true
+    description: Which method will be used to deploy the code (EC2 is the only one on this first stage)
   EC2_IP:
     required: true
     description: IP to connecto to the EC2 server. Ex. ec2-xx-xxx-xxx-x.compute-4.amazonaws.com
@@ -27,19 +30,31 @@ runs:
 
     - name: Make scripts executable
       shell: bash
-      run: chmod +x ${{ github.action_path }}/scripts/*.sh
+      run: |
+        echo ✅ Method detected: ${{ inputs.METHOD }}
+        chmod +x ${{ github.action_path }}/scripts/*.sh
 
-    - name: Preparing PEM Key for SSH Connection
-      id: preparing_key
+    - name: EC2 - Preparing PEM Key for SSH Connection
+      id: ec2_pem
       shell: bash
-      run: ${{ github.action_path }}/scripts/ssh_key.sh
+      run: |
+        if [ "${{ inputs.METHOD }}" = "EC2" ]; then
+          echo "${{ inputs.EC2_KEY }}" | tr -d '\r' > server_key.pem
+          chmod 600 server_key.pem
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ inputs.EC2_IP }} >> ~/.ssh/known_hosts
+        fi
 
-    - name: Copying Docker Image
-      id: copy
+    - name: EC2 - Copy and deploy docker image
+      id: ec2_copy_deploy
       shell: bash
-      run: scp -i server_key.pem ${{ steps.docker_config.outputs.IMAGE_NAME }}.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_IP }}:/root/
-
-    - name: Deploying in EC2 Instance
-      id: deploy
-      shell: bash
-      run: ${{ github.action_path }}/scripts/deploy.sh
+      run: |
+        if [ "${{ inputs.METHOD }}" = "EC2" ]; then
+          echo Desplegando
+          # scp -i server_key.pem ${{ inputs.IMAGE_NAME }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
+          # ssh -i server_key.pem ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} 'bash -s' < ${{ github.action_path }}/scripts/ec2_deploy.sh
+          # ${{ inputs.IMAGE_NAME }}.tar \
+          # ${{ inputs.COMPOSE_PORTS }} \
+          # ${{ inputs.COMPOSE_NETWORKS }} \
+          # ${{ inputs.COMPOSE_NAME }}
+        fi
