@@ -20,7 +20,7 @@ inputs:
   COMPOSE_NETWORKS:
     required: true
     description: Formatted networks for a docker compose structure
-  COMPOSE_NAME:
+  COMPOSE_FILE_NAME:
     required: true
     description: Name for the new docker compose file to be created
 
@@ -56,5 +56,5 @@ runs:
           # ${{ inputs.IMAGE_NAME }}.tar \
           # ${{ inputs.COMPOSE_PORTS }} \
           # ${{ inputs.COMPOSE_NETWORKS }} \
-          # ${{ inputs.COMPOSE_NAME }}
+          # ${{ inputs.COMPOSE_FILE_NAME }}
         fi
