@@ -1,27 +1,20 @@
 # Deploying application on an EC2 Instance with Amazon Linux
 
-# Variable assignation
-FILE_NAME=$1
-COMPOSE_PORTS=$2
-COMPOSE_NETWORKS=$3
-COMPOSE_NAME=$4
-SERVICE_NAME=${FILE_NAME%.*}
-COMPOSE_IMAGE=$SERVICE_NAME
 ERROR_COLOR='\033[0;31m'
 
-echo "FILE_NAME       = $FILE_NAME"
+echo "DOCKER_IMAGE       = $DOCKER_IMAGE"
 echo "COMPOSE_PORTS   = $COMPOSE_PORTS"
 echo "COMPOSE_NETWORKS= $COMPOSE_NETWORKS"
-echo "COMPOSE_NAME    = $COMPOSE_NAME"
+echo "COMPOSE_FILE_NAME    = $COMPOSE_FILE_NAME"
 echo "SERVICE_NAME    = $SERVICE_NAME"
 echo "COMPOSE_IMAGE   = $COMPOSE_IMAGE"
 
 allChecks() {
     # Check if Docker image has been really transfered
-    if [ -f "./$FILE_NAME" ]; then
-        echo "$FILE_NAME detected"
+    if [ -f "./$DOCKER_IMAGE" ]; then
+        echo "$DOCKER_IMAGE detected"
     else
-        echo -e "${ERROR_COLOR}$FILE_NAME not detected, exiting${NC}" >&2
+        echo -e "${ERROR_COLOR}$DOCKER_IMAGE not detected, exiting${NC}" >&2
         exit 1
     fi
 
@@ -47,20 +40,20 @@ allChecks() {
     fi
 
     # Check if docker-compose.yml exists, take in count this docker-compose will have another personalized name which come from the CICD as param when this script was executed
-    if [ -f ${COMPOSE_NAME} ]; then
-        echo "${COMPOSE_NAME} detected"
+    if [ -f ${COMPOSE_FILE_NAME} ]; then
+        echo "${COMPOSE_FILE_NAME} detected"
     else
         echo -e "${ERROR_COLOR}Docker compose yml file not detected, creating it${NC}"
-        echo -e "services:" >${COMPOSE_NAME}
+        echo -e "services:" >${COMPOSE_FILE_NAME}
     fi
 }
 
 loadDockerImage() {
     # Deletion and mounting new Docker image. Then get the new tag for the docker-compose file
-    docker-compose -f $COMPOSE_NAME down --rmi local
+    docker-compose -f $COMPOSE_FILE_NAME down --rmi local
     docker images -q $SERVICE_NAME | xargs docker rmi --force
-    docker load -i $FILE_NAME
-    rm -f $FILE_NAME
+    docker load -i $DOCKER_IMAGE
+    rm -f $DOCKER_IMAGE
     COMPOSE_IMAGE+=$(printf ":%s" "$(docker images --format "{{.Tag}}" $SERVICE_NAME)")
 }
 
@@ -95,16 +88,16 @@ composeConfig() {
     ${formatted_ports}"
 
     # Insert service configuration
-    if grep -q "# START_${SERVICE_NAME}" "$COMPOSE_NAME" && grep -q "# END_${SERVICE_NAME}" "$COMPOSE_NAME" && awk "/# START_${SERVICE_NAME}/ {start=NR} /# END_${SERVICE_NAME}/ {end=NR} END {exit start >= end}" "$COMPOSE_NAME"; then
+    if grep -q "# START_${SERVICE_NAME}" "$COMPOSE_FILE_NAME" && grep -q "# END_${SERVICE_NAME}" "$COMPOSE_FILE_NAME" && awk "/# START_${SERVICE_NAME}/ {start=NR} /# END_${SERVICE_NAME}/ {end=NR} END {exit start >= end}" "$COMPOSE_FILE_NAME"; then
         # Case config block already created, replace all the config between comment flags
-        perl -0777 -i -pe "s/# START_${SERVICE_NAME}.*# END_${SERVICE_NAME}/# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}/s" "$COMPOSE_NAME"
+        perl -0777 -i -pe "s/# START_${SERVICE_NAME}.*# END_${SERVICE_NAME}/# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}/s" "$COMPOSE_FILE_NAME"
     else
         # Case config block don't exist, append it at the end of the file
-        echo -e "\n# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}" >>$COMPOSE_NAME
+        echo -e "\n# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}" >>$COMPOSE_FILE_NAME
     fi
 
     # Erasing networks section
-    sed -i '/# START_NETWORK/,/# END_NETWORK/d' "$COMPOSE_NAME"
+    sed -i '/# START_NETWORK/,/# END_NETWORK/d' "$COMPOSE_FILE_NAME"
 
     # List all networks in compose file
     listed_networks=($(awk '
@@ -113,11 +106,11 @@ composeConfig() {
     flag && /^[[:space:]]*-[[:space:]]*/ {
         sub(/^[[:space:]]*-[[:space:]]*/, ""); 
         if ($0 ~ /^[A-Za-z0-9_-]+$/ && !seen[$0]++) print
-    }' "$COMPOSE_NAME" | sort))
+    }' "$COMPOSE_FILE_NAME" | sort))
 
     # Re-insert network configuration
     if [[ -z $listed_networks ]]; then
-        echo "No network found in $COMPOSE_NAME."
+        echo "No network found in $COMPOSE_FILE_NAME."
     else
         formatted_networks=$(printf "networks:\n")
 
@@ -128,14 +121,14 @@ composeConfig() {
         echo -e "
         # START_NETWORK
         ${formatted_networks}
-        # END_NETWORK" >>$COMPOSE_NAME
+        # END_NETWORK" >>$COMPOSE_FILE_NAME
     fi
 }
 
 composeFormatter() {
     # Add the correct identation for each line using an identation level setted in "level" array. The dictionary asign an identation level for each start line pattern. Of course, not all keys are covered. And some keys are duplicated on an docker-compose.yml like "network". Which use a comment flag to identify the correct identation
 
-    echo Formatting $COMPOSE_NAME
+    echo Formatting $COMPOSE_FILE_NAME
 
     level=(0 2 4 6 8 10 12 14)
 
@@ -233,12 +226,12 @@ composeFormatter() {
 
         echo "$padded_line" >>"$temp_file"
         previous_line_was_comment=false
-    done <"$COMPOSE_NAME"
+    done <"$COMPOSE_FILE_NAME"
 
     # Replace the original file with the new temp file formatted
-    mv "$temp_file" "$COMPOSE_NAME"
+    mv "$temp_file" "$COMPOSE_FILE_NAME"
 
-    echo $COMPOSE_NAME formatted
+    echo $COMPOSE_FILE_NAME formatted
 }
 
 dockerNetCleaner() {
@@ -265,7 +258,7 @@ dockerNetCleaner() {
 }
 
 composeUp() {
-    docker-compose -f $COMPOSE_NAME up -d
+    docker-compose -f $COMPOSE_FILE_NAME up -d
 }
 
 allChecks
