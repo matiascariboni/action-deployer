@@ -45,17 +45,19 @@ runs:
           ssh-keyscan -H ${{ inputs.EC2_IP }} >> ~/.ssh/known_hosts
         fi
       env:
-        DOCKER_IMAGE: ${{ inputs.DOCKER_IMAGE }}.tar
-        COMPOSE_PORTS: ${{ inputs.COMPOSE_PORTS }}
-        COMPOSE_NETWORKS: ${{ inputs.COMPOSE_NETWORKS}}
-        COMPOSE_FILE_NAME: ${{ inputs.COMPOSE_FILE_NAME}}
+        EC2_IP: ${{ inputs.EC2_IP }}.tar
+        EC2_KEY: ${{ inputs.EC2_KEY }}
 
     - name: EC2 - Copy and deploy docker image
       id: ec2_copy_deploy
       shell: bash
       run: |
         if [ "${{ inputs.METHOD }}" = "EC2" ]; then
-          echo Desplegando
-          # scp -i server_key.pem ${{ inputs.IMAGE_NAME }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
-          # ssh -i server_key.pem ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} 'bash -s' < ${{ github.action_path }}/scripts/ec2_deploy.sh
+          scp -i server_key.pem ${{ inputs.DOCKER_IMAGE }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
+          ssh -i server_key.pem ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} 'bash -s' < ${{ github.action_path }}/scripts/ec2_deploy.sh
         fi
+      env:
+        DOCKER_IMAGE: ${{ inputs.DOCKER_IMAGE }}.tar
+        COMPOSE_PORTS: ${{ inputs.COMPOSE_PORTS }}
+        COMPOSE_NETWORKS: ${{ inputs.COMPOSE_NETWORKS}}
+        COMPOSE_FILE_NAME: ${{ inputs.COMPOSE_FILE_NAME}}
