@@ -51,6 +51,13 @@ runs:
         EC2_IP: ${{ inputs.EC2_IP }}.tar
         EC2_KEY: ${{ inputs.EC2_KEY }}
 
+    - name: chequeo de variables
+      run: |
+        echo IMAGE_NAME ${{inputs.IMAGE_NAME}}
+        echo COMPOSE_PORTS ${{inputs.COMPOSE_PORTS}}
+        echo COMPOSE_NETWORKS ${{inputs.COMPOSE_NETWORKS}}
+        echo COMPOSE_FILE_NAME ${{inputs.COMPOSE_FILE_NAME}}
+
     - name: EC2 - Copy and deploy docker image
       id: ec2_copy_deploy
       shell: bash
