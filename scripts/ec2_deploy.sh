@@ -1,6 +1,8 @@
-# Deploying application on an EC2 Instance with Amazon Linux
+# Deploying application on an EC2 InstaNO_COLORe with Amazon Linux
 
 ERROR_COLOR='\033[0;31m'
+WARNING_COLOR="\033[0;33m"
+NO_COLOR="\033[0m"
 SERVICE_NAME=${FILE_NAME%.*}
 COMPOSE_IMAGE=$SERVICE_NAME
 
@@ -13,40 +15,48 @@ allChecks() {
     echo "SERVICE_NAME     = $SERVICE_NAME"
     echo "COMPOSE_IMAGE    = $COMPOSE_IMAGE"
 
-    vars_to_check=(
+    required_vars=(
     IMAGE_NAME
-    COMPOSE_PORTS
-    COMPOSE_NETWORKS
     COMPOSE_FILE_NAME
     )
 
-    empty_vars=()
+    optional_vars=(
+    COMPOSE_PORTS
+    COMPOSE_NETWORKS
+    )
 
-    for var_name in "${vars_to_check[@]}"; do
+    empty_vars=()
+    for var_name in "${required_vars[@]}"; do
         if [ -z "${!var_name}" ]; then
             empty_vars+=("$var_name")
         fi
     done
 
     if [ ${#empty_vars[@]} -ne 0 ]; then
-        echo -e "${ERROR_COLOR}The next variables are empty:${NC}"
+        echo -e "${ERROR_COLOR}The following required variables are empty:${NC}"
         for var in "${empty_vars[@]}"; do
             echo -e "${ERROR_COLOR}- $var${NC}"
         done
         exit 1
     fi
 
+    for var_name in "${optional_vars[@]}"; do
+        if [ -z "${!var_name}" ]; then
+            echo -e "${WARNING_COLOR}'$var_name' is not set.${NC}"
+        fi
+    done
+
     # Check if Docker image has been really transfered
     if [ -f "./$IMAGE_NAME" ]; then
         echo "$IMAGE_NAME detected"
     else
-        echo -e "${ERROR_COLOR}$IMAGE_NAME not detected, exiting${NC}" >&2
+        echo -e "${ERROR_COLOR}$IMAGE_NAME not detected, exiting${NO_COLOR}" >&2
         exit 1
     fi
 
     # Check if Docker are installed
     if ! command -v docker &>/dev/null; then
-        echo -e "${ERROR_COLOR}Docker not detected, installing it${NC}"
+        echo -e "${ERROR_COLOR}Docker not detected, installing it${NO_COLOR}"
         sudo yum update -y
         sudo yum install docker -y
         sudo systemctl start docker
@@ -58,7 +68,7 @@ allChecks() {
 
     # Check if Docker Compose are installed
     if ! command -v docker-compose &>/dev/null; then
-        echo -e "${ERROR_COLOR}Docker Compose not detected, installing it${NC}"
+        echo -e "${ERROR_COLOR}Docker Compose not detected, installing it${NO_COLOR}"
         sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
         sudo chmod +x /usr/local/bin/docker-compose
     else
@@ -69,7 +79,7 @@ allChecks() {
     if [ -f ${COMPOSE_FILE_NAME} ]; then
         echo "${COMPOSE_FILE_NAME} detected"
     else
-        echo -e "${ERROR_COLOR}Docker compose yml file not detected, creating it${NC}"
+        echo -e "${ERROR_COLOR}Docker compose yml file not detected, creating it${NO_COLOR}"
         echo -e "services:" >${COMPOSE_FILE_NAME}
     fi
 }
@@ -243,7 +253,7 @@ composeFormatter() {
                 if [ "$start_network_flag" = true ]; then
                     padding_left=${level[1]}
                 else
-                    # Increasing the identation
+                    # INO_COLORreasing the identation
                     padding_left=$((current_indent + 2))
                 fi
                 padded_line=$(printf "%*s" $((${#line} + padding_left)) "$line")
