@@ -14,7 +14,7 @@ inputs:
   EC2_KEY:
     required: true
     description: Key to connect to the EC2 Server via SSH
-  DOCKER_IMAGE:
+  IMAGE_NAME:
     required: true
     description: Zipped file with the Docker image to be copied and deployed
   COMPOSE_PORTS:
@@ -56,11 +56,11 @@ runs:
       shell: bash
       run: |
         if [ "${{ inputs.METHOD }}" = "EC2" ]; then
-          scp -i server_key.pem ${{ inputs.DOCKER_IMAGE }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
+          scp -i server_key.pem ${{ inputs.IMAGE_NAME }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
           ssh -i server_key.pem ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} 'bash -s' < ${{ github.action_path }}/scripts/ec2_deploy.sh
         fi
       env:
-        DOCKER_IMAGE: ${{ inputs.DOCKER_IMAGE }}.tar
+        IMAGE_NAME: ${{ inputs.IMAGE_NAME }}.tar
         COMPOSE_PORTS: ${{ inputs.COMPOSE_PORTS }}
         COMPOSE_NETWORKS: ${{ inputs.COMPOSE_NETWORKS}}
         COMPOSE_FILE_NAME: ${{ inputs.COMPOSE_FILE_NAME}}
