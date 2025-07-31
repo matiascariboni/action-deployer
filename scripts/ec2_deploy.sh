@@ -4,20 +4,43 @@ ERROR_COLOR='\033[0;31m'
 SERVICE_NAME=${FILE_NAME%.*}
 COMPOSE_IMAGE=$SERVICE_NAME
 
-echo "IMAGE_NAME       = $IMAGE_NAME"
-echo "COMPOSE_PORTS    = $COMPOSE_PORTS"
-echo "COMPOSE_NETWORKS = $COMPOSE_NETWORKS"
-echo "COMPOSE_FILE_NAME= $COMPOSE_FILE_NAME"
-echo "SERVICE_NAME     = $SERVICE_NAME"
-echo "COMPOSE_IMAGE    = $COMPOSE_IMAGE"
-exit 1
-
 allChecks() {
+    # Check inputs
+    echo "IMAGE_NAME       = $IMAGE_NAME"
+    echo "COMPOSE_PORTS    = $COMPOSE_PORTS"
+    echo "COMPOSE_NETWORKS = $COMPOSE_NETWORKS"
+    echo "COMPOSE_FILE_NAME= $COMPOSE_FILE_NAME"
+    echo "SERVICE_NAME     = $SERVICE_NAME"
+    echo "COMPOSE_IMAGE    = $COMPOSE_IMAGE"
+
+    vars_to_check=(
+    IMAGE_NAME
+    COMPOSE_PORTS
+    COMPOSE_NETWORKS
+    COMPOSE_FILE_NAME
+    )
+
+    empty_vars=()
+
+    for var_name in "${vars_to_check[@]}"; do
+        if [ -z "${!var_name}" ]; then
+            empty_vars+=("$var_name")
+        fi
+    done
+
+    if [ ${#empty_vars[@]} -ne 0 ]; then
+        echo -e "${ERROR_COLOR}The next variables are empty:${NC}"
+        for var in "${empty_vars[@]}"; do
+            echo -e "${ERROR_COLOR}- $var${NC}"
+        done
+        exit 1
+    fi
+
     # Check if Docker image has been really transfered
-    if [ -f "./$DOCKER_IMAGE" ]; then
-        echo "$DOCKER_IMAGE detected"
+    if [ -f "./$IMAGE_NAME" ]; then
+        echo "$IMAGE_NAME detected"
     else
-        echo -e "${ERROR_COLOR}$DOCKER_IMAGE not detected, exiting${NC}" >&2
+        echo -e "${ERROR_COLOR}$IMAGE_NAME not detected, exiting${NC}" >&2
         exit 1
     fi
 
@@ -55,8 +78,8 @@ loadDockerImage() {
     # Deletion and mounting new Docker image. Then get the new tag for the docker-compose file
     docker-compose -f $COMPOSE_FILE_NAME down --rmi local
     docker images -q $SERVICE_NAME | xargs docker rmi --force
-    docker load -i $DOCKER_IMAGE
-    rm -f $DOCKER_IMAGE
+    docker load -i $IMAGE_NAME
+    rm -f $IMAGE_NAME
     COMPOSE_IMAGE+=$(printf ":%s" "$(docker images --format "{{.Tag}}" $SERVICE_NAME)")
 }
 
