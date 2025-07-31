@@ -8,9 +8,12 @@ inputs:
   EC2_IP:
     required: true
     description: IP to connecto to the EC2 server. Ex. ec2-xx-xxx-xxx-x.compute-4.amazonaws.com
+  EC2_USER:
+    required: true
+    description: user to login on EC2 instance
   EC2_KEY:
     required: true
-    description: Key to connect to the EC2 Server via SSH.
+    description: Key to connect to the EC2 Server via SSH
   DOCKER_IMAGE:
     required: true
     description: Zipped file with the Docker image to be copied and deployed
