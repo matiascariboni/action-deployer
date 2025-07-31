@@ -62,10 +62,10 @@ runs:
       run: |
         if [ "${{ inputs.METHOD }}" = "EC2" ]; then
           scp -i server_key.pem $IMAGE_NAME ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
-          ssh -i server_key.pem ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} 'bash -s' < ${{ github.action_path }}/scripts/ec2_deploy.sh
+          ssh -i server_key.pem ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} \
+          "COMPOSE_PORTS='${{ inputs.COMPOSE_PORTS }}' \
+          COMPOSE_NETWORKS='${{ inputs.COMPOSE_NETWORKS }}' \
+          COMPOSE_FILE_NAME='${{ inputs.COMPOSE_FILE_NAME }}' \
+          IMAGE_NAME='${{ inputs.IMAGE_NAME }}.tar' \
+          bash -s" < ${{ github.action_path }}/scripts/ec2_deploy.sh
         fi
-      env:
-        IMAGE_NAME: ${{ inputs.IMAGE_NAME }}.tar
-        COMPOSE_PORTS: ${{ inputs.COMPOSE_PORTS }}
-        COMPOSE_NETWORKS: ${{ inputs.COMPOSE_NETWORKS }}
-        COMPOSE_FILE_NAME: ${{ inputs.COMPOSE_FILE_NAME }}

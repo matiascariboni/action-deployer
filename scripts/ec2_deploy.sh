@@ -1,6 +1,8 @@
 # Deploying application on an EC2 Instance with Amazon Linux
 
 ERROR_COLOR='\033[0;31m'
+SERVICE_NAME=${FILE_NAME%.*}
+COMPOSE_IMAGE=$SERVICE_NAME
 
 echo "IMAGE_NAME       = $IMAGE_NAME"
 echo "COMPOSE_PORTS    = $COMPOSE_PORTS"
