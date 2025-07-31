@@ -48,20 +48,12 @@ runs:
           ssh-keyscan -H ${{ inputs.EC2_IP }} >> ~/.ssh/known_hosts
         fi
 
-    - name: chequeo de variables
-      shell: bash
-      run: |
-        echo IMAGE_NAME ${{inputs.IMAGE_NAME}}
-        echo COMPOSE_PORTS ${{inputs.COMPOSE_PORTS}}
-        echo COMPOSE_NETWORKS ${{inputs.COMPOSE_NETWORKS}}
-        echo COMPOSE_FILE_NAME ${{inputs.COMPOSE_FILE_NAME}}
-
     - name: EC2 - Copy and deploy docker image
       id: ec2_copy_deploy
       shell: bash
       run: |
         if [ "${{ inputs.METHOD }}" = "EC2" ]; then
-          scp -i server_key.pem $IMAGE_NAME ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
+          scp -i server_key.pem ${{ inputs.IMAGE_NAME }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
           ssh -i server_key.pem ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} \
           "COMPOSE_PORTS='${{ inputs.COMPOSE_PORTS }}' \
           COMPOSE_NETWORKS='${{ inputs.COMPOSE_NETWORKS }}' \
