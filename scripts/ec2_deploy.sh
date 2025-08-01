@@ -96,7 +96,7 @@ loadDockerImage() {
 composeConfig() {
     # Check if comment flags (START_SERVICE_NAME & END_SERVICE_NAME are created. Case yes, delete all the lines between them and write the new configuration. Case no, insert the new configuration at the end of the file)
 
-    if [[ "$COMPOSE_PORTS" != "null" ]]; then
+    if [[ "$COMPOSE_PORTS" != "" ]]; then
         IFS=',' read -ra ports <<<"$COMPOSE_PORTS"
         formatted_ports=$(printf "ports:\n")
         for port in "${ports[@]}"; do
@@ -106,7 +106,7 @@ composeConfig() {
         formatted_ports=""
     fi
 
-    if [[ "$COMPOSE_NETWORKS" != "null" ]]; then
+    if [[ "$COMPOSE_NETWORKS" != "" ]]; then
         IFS=',' read -ra nets <<<"$COMPOSE_NETWORKS"
         formatted_networks=$(printf "networks:\n")
         for net in "${nets[@]}"; do
