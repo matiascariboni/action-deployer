@@ -11,6 +11,7 @@ allChecks() {
     echo "IMAGE_NAME       = $IMAGE_NAME"
     echo "COMPOSE_PORTS    = $COMPOSE_PORTS"
     echo "COMPOSE_NETWORKS = $COMPOSE_NETWORKS"
+    echo "COMPOSE_VOLUMES  = $COMPOSE_VOLUMES"
     echo "COMPOSE_FILE_NAME= $COMPOSE_FILE_NAME"
     echo "SERVICE_NAME     = $SERVICE_NAME"
     echo "COMPOSE_IMAGE    = $COMPOSE_IMAGE"
@@ -23,6 +24,7 @@ allChecks() {
     optional_vars=(
     COMPOSE_PORTS
     COMPOSE_NETWORKS
+    COMPOSE_VOLUMES
     )
 
     empty_vars=()
@@ -116,12 +118,23 @@ composeConfig() {
         formatted_networks=""
     fi
 
+    if [[ "$COMPOSE_VOLUMES" != "" ]]; then
+        IFS=',' read -ra volumes <<<"$COMPOSE_VOLUMES"
+        formatted_volumes=$(printf "volumes:\n")
+        for volume in "${volumes[@]}"; do
+            formatted_volumes+="\n- ${volume}"
+        done
+    else
+        formatted_volumes=""
+    fi
+
     COMPOSE_INSERT="${SERVICE_NAME}:
     image: \"${COMPOSE_IMAGE}\"
     container_name: \"${SERVICE_NAME}\"
     ${formatted_networks}
     restart: \"always\"
-    ${formatted_ports}"
+    ${formatted_ports}
+    ${formatted_volumes}"
 
     # Insert service configuration
     if grep -q "# START_${SERVICE_NAME}" "$COMPOSE_FILE_NAME" && grep -q "# END_${SERVICE_NAME}" "$COMPOSE_FILE_NAME" && awk "/# START_${SERVICE_NAME}/ {start=NR} /# END_${SERVICE_NAME}/ {end=NR} END {exit start >= end}" "$COMPOSE_FILE_NAME"; then
@@ -253,7 +266,7 @@ composeFormatter() {
                 if [ "$start_network_flag" = true ]; then
                     padding_left=${level[1]}
                 else
-                    # INO_COLORreasing the identation
+                    # Reasing the identation
                     padding_left=$((current_indent + 2))
                 fi
                 padded_line=$(printf "%*s" $((${#line} + padding_left)) "$line")
