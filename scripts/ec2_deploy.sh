@@ -97,12 +97,11 @@ loadDockerImage() {
 
 composeConfig() {
     # Check if comment flags (START_SERVICE_NAME & END_SERVICE_NAME are created. Case yes, delete all the lines between them and write the new configuration. Case no, insert the new configuration at the end of the file)
-
     if [[ "$COMPOSE_PORTS" != "" ]]; then
         IFS=',' read -ra ports <<<"$COMPOSE_PORTS"
-        formatted_ports=$(printf "ports:\n")
+        formatted_ports=$(printf "ports:")
         for port in "${ports[@]}"; do
-            formatted_ports+="\n- \"${port}\""
+            formatted_ports+="\n    - \"${port}\""
         done
     else
         formatted_ports=""
@@ -110,9 +109,9 @@ composeConfig() {
 
     if [[ "$COMPOSE_NETWORKS" != "" ]]; then
         IFS=',' read -ra nets <<<"$COMPOSE_NETWORKS"
-        formatted_networks=$(printf "networks:\n")
+        formatted_networks=$(printf "networks:")
         for net in "${nets[@]}"; do
-            formatted_networks+="\n- ${net}"
+            formatted_networks+="\n    - ${net}"
         done
     else
         formatted_networks=""
@@ -120,29 +119,47 @@ composeConfig() {
 
     if [[ "$COMPOSE_VOLUMES" != "" ]]; then
         IFS=',' read -ra volumes <<<"$COMPOSE_VOLUMES"
-        formatted_volumes=$(printf "volumes:\n")
+        formatted_volumes=$(printf "volumes:")
         for volume in "${volumes[@]}"; do
-            formatted_volumes+="\n- ${volume}"
+            formatted_volumes+="\n    - ${volume}"
         done
     else
         formatted_volumes=""
     fi
 
-    COMPOSE_INSERT="${SERVICE_NAME}:
+    COMPOSE_INSERT="  ${SERVICE_NAME}:
     image: \"${COMPOSE_IMAGE}\"
-    container_name: \"${SERVICE_NAME}\"
-    ${formatted_networks}
-    restart: \"always\"
-    ${formatted_ports}
-    ${formatted_volumes}"
+    container_name: \"${SERVICE_NAME}\""
+
+    # Add networks if they exist
+    if [[ "$formatted_networks" != "" ]]; then
+        COMPOSE_INSERT="${COMPOSE_INSERT}
+        ${formatted_networks}"
+    fi
+
+    COMPOSE_INSERT="${COMPOSE_INSERT}
+    restart: \"always\""
+
+    # Add ports if they exist
+    if [[ "$formatted_ports" != "" ]]; then
+        COMPOSE_INSERT="${COMPOSE_INSERT}
+        ${formatted_ports}"
+    fi
+
+    # Add volumes if they exist
+    if [[ "$formatted_volumes" != "" ]]; then
+        COMPOSE_INSERT="${COMPOSE_INSERT}
+        ${formatted_volumes}"
+    fi
 
     # Insert service configuration
     if grep -q "# START_${SERVICE_NAME}" "$COMPOSE_FILE_NAME" && grep -q "# END_${SERVICE_NAME}" "$COMPOSE_FILE_NAME" && awk "/# START_${SERVICE_NAME}/ {start=NR} /# END_${SERVICE_NAME}/ {end=NR} END {exit start >= end}" "$COMPOSE_FILE_NAME"; then
         # Case config block already created, replace all the config between comment flags
-        perl -0777 -i -pe "s/# START_${SERVICE_NAME}.*# END_${SERVICE_NAME}/# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}/s" "$COMPOSE_FILE_NAME"
+        # Use different delimiter to avoid conflicts with paths containing /
+        perl -0777 -i -pe "s|# START_${SERVICE_NAME}.*# END_${SERVICE_NAME}|# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}|s" "$COMPOSE_FILE_NAME"
     else
         # Case config block don't exist, append it at the end of the file
-        echo -e "\n# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}" >>$COMPOSE_FILE_NAME
+        echo -e "\n# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}" >>"$COMPOSE_FILE_NAME"
     fi
 
     # Erasing networks section
@@ -150,10 +167,10 @@ composeConfig() {
 
     # List all networks in compose file
     listed_networks=($(awk '
-    /networks:/ {flag=1; next} 
-    /^[^[:space:]-]/ {flag=0} 
-    flag && /^[[:space:]]*-[[:space:]]*/ {
-        sub(/^[[:space:]]*-[[:space:]]*/, ""); 
+        /networks:/ {flag=1; next}
+        /^[^[:space:]-]/ {flag=0}
+        flag && /^[[:space:]]*-[[:space:]]*/ {
+        sub(/^[[:space:]]*-[[:space:]]*/, "");
         if ($0 ~ /^[A-Za-z0-9_-]+$/ && !seen[$0]++) print
     }' "$COMPOSE_FILE_NAME" | sort))
 
@@ -161,16 +178,14 @@ composeConfig() {
     if [[ -z $listed_networks ]]; then
         echo "No network found in $COMPOSE_FILE_NAME."
     else
-        formatted_networks=$(printf "networks:\n")
-
+        formatted_networks=$(printf "networks:")
         for network in "${listed_networks[@]}"; do
-            formatted_networks+="\n${network}:\ndriver: bridge"
+            formatted_networks+="\n  ${network}:\n    driver: bridge"
         done
-
         echo -e "
         # START_NETWORK
         ${formatted_networks}
-        # END_NETWORK" >>$COMPOSE_FILE_NAME
+        # END_NETWORK" >>"$COMPOSE_FILE_NAME"
     fi
 }
 
