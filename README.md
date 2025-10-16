@@ -1,4 +1,5 @@
 # action-deployer
+
 A GitHub Action to deploy projects on different AWS services, specifically EC2 instances, using Docker Compose.
 
 ## Description
@@ -34,12 +35,16 @@ For `action-deployer` to function correctly, it must be used in conjunction with
 - **Description**: The name of the zipped Docker image file to be copied and deployed.
 
 ### `COMPOSE_PORTS`
-- **Required**: `true`
-- **Description**: The ports to be exposed for the Docker containers.
+- **Required**: `false`
+- **Description**: The ports to be exposed for the Docker containers. Format: `'8080:80,3000:3000'`. If not provided, the container will run without exposed ports.
 
 ### `COMPOSE_NETWORKS`
-- **Required**: `true`
-- **Description**: The networks for Docker Compose.
+- **Required**: `false`
+- **Description**: The networks for Docker Compose. Format: `'network1,network2'`. If not provided, the container will use Docker's default networking.
+
+### `COMPOSE_VOLUMES`
+- **Required**: `false`
+- **Description**: The volumes for Docker Compose. Format: `'/host/path:/container/path,volume_name:/data'`. If not provided, no volumes will be mounted.
 
 ### `COMPOSE_FILE_NAME`
 - **Required**: `true`
@@ -47,20 +52,47 @@ For `action-deployer` to function correctly, it must be used in conjunction with
 
 ## Example Usage
 
+### Basic deployment (without ports, networks, or volumes)
+
 ```yaml
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
-
+    
     - name: Dockerize project
       uses: matiascariboni/action-dockerization@v1
       with:
         # Dockerization inputs like Dockerfile path, etc.
+    
+    - name: Deploy to EC2
+      uses: matiascariboni/action-deployer@v1
+      with:
+        METHOD: 'EC2'
+        EC2_IP: ${{ secrets.EC2_IP }}
+        EC2_USER: ${{ secrets.EC2_USER }}
+        EC2_KEY: ${{ secrets.EC2_KEY }}
+        IMAGE_NAME: 'my-docker-image'
+        COMPOSE_FILE_NAME: 'docker-compose.yml'
+```
 
+### Full deployment (with all optional parameters)
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    
+    - name: Dockerize project
+      uses: matiascariboni/action-dockerization@v1
+      with:
+        # Dockerization inputs like Dockerfile path, etc.
+    
     - name: Deploy to EC2
       uses: matiascariboni/action-deployer@v1
       with:
@@ -70,7 +102,8 @@ jobs:
         EC2_KEY: ${{ secrets.EC2_KEY }}
         IMAGE_NAME: 'my-docker-image'
         COMPOSE_PORTS: '8080:80,3000:3000'
-        COMPOSE_NETWORKS: 'my_network'
+        COMPOSE_NETWORKS: 'my_network,backend_network'
+        COMPOSE_VOLUMES: '/var/log/app:/app/logs,app_data:/data'
         COMPOSE_FILE_NAME: 'docker-compose.yml'
 ```
 
@@ -83,6 +116,11 @@ jobs:
    - Install Docker and Docker Compose if not already installed.
    - Load the Docker image and set up the Docker Compose configuration.
    - Deploy the service with Docker Compose.
+5. The script intelligently handles optional parameters:
+   - If `COMPOSE_PORTS` is not provided, the container runs without port mappings
+   - If `COMPOSE_NETWORKS` is not provided, Docker's default networking is used
+   - If `COMPOSE_VOLUMES` is not provided, no volumes are mounted
+   - Network sections are only created in the Compose file when networks are actually used
 
 ## License
 
