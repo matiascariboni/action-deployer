@@ -43,7 +43,7 @@ allChecks() {
     fi
 
     for var_name in "${optional_vars[@]}"; do
-        if [ -z "${!var_name}" ]; then
+        if [ -z "${!var_name+x}" ]; then
             echo -e "${WARNING_COLOR}'$var_name' is not set.${NC}"
         fi
     done
@@ -97,7 +97,7 @@ loadDockerImage() {
 
 composeConfig() {
     # Check if comment flags (START_SERVICE_NAME & END_SERVICE_NAME are created. Case yes, delete all the lines between them and write the new configuration. Case no, insert the new configuration at the end of the file)
-    if [[ "$COMPOSE_PORTS" != "" ]]; then
+    if [[ -n "$COMPOSE_PORTS" ]]; then
         IFS=',' read -ra ports <<<"$COMPOSE_PORTS"
         formatted_ports=$(printf "ports:")
         for port in "${ports[@]}"; do
@@ -107,7 +107,7 @@ composeConfig() {
         formatted_ports=""
     fi
 
-    if [[ "$COMPOSE_NETWORKS" != "" ]]; then
+    if [[ -n "$COMPOSE_NETWORKS" ]]; then
         IFS=',' read -ra nets <<<"$COMPOSE_NETWORKS"
         formatted_networks=$(printf "networks:")
         for net in "${nets[@]}"; do
@@ -117,7 +117,7 @@ composeConfig() {
         formatted_networks=""
     fi
 
-    if [[ "$COMPOSE_VOLUMES" != "" ]]; then
+    if [[ -n "$COMPOSE_VOLUMES" ]]; then
         IFS=',' read -ra volumes <<<"$COMPOSE_VOLUMES"
         formatted_volumes=$(printf "volumes:")
         for volume in "${volumes[@]}"; do
@@ -174,18 +174,18 @@ composeConfig() {
         if ($0 ~ /^[A-Za-z0-9_-]+$/ && !seen[$0]++) print
     }' "$COMPOSE_FILE_NAME" | sort))
 
-    # Re-insert network configuration
-    if [[ -z $listed_networks ]]; then
-        echo "No network found in $COMPOSE_FILE_NAME."
+    # Re-insert network configuration ONLY if networks exist
+    if [[ ${#listed_networks[@]} -eq 0 ]]; then
+        echo "No networks found in $COMPOSE_FILE_NAME. Skipping network section."
     else
         formatted_networks=$(printf "networks:")
         for network in "${listed_networks[@]}"; do
             formatted_networks+="\n  ${network}:\n    driver: bridge"
         done
         echo -e "
-        # START_NETWORK
-        ${formatted_networks}
-        # END_NETWORK" >>"$COMPOSE_FILE_NAME"
+    # START_NETWORK
+    ${formatted_networks}
+    # END_NETWORK" >>"$COMPOSE_FILE_NAME"
     fi
 }
 

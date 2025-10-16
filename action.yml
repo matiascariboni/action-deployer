@@ -18,10 +18,10 @@ inputs:
     required: true
     description: Zipped file with the Docker image to be copied and deployed
   COMPOSE_PORTS:
-    required: true
+    required: false
     description: Formatted ports for a docker compose structure
   COMPOSE_NETWORKS:
-    required: true
+    required: false
     description: Formatted networks for a docker compose structure
   COMPOSE_VOLUMES:
     required: false
