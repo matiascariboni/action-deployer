@@ -36,9 +36,23 @@ runs:
       run: |
         echo "Method: ${{ inputs.METHOD }} | Target: ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}"
         echo "Image: ${{ inputs.IMAGE_NAME }} | Compose: ${{ inputs.COMPOSE_FILE_NAME }}"
-        [ -z "${{ inputs.METHOD }}" ] && echo "❌ METHOD missing" && exit 1
-        [ -z "${{ inputs.EC2_IP }}" ] && echo "❌ EC2_IP missing" && exit 1
-        [ -z "${{ inputs.IMAGE_NAME }}" ] && echo "❌ IMAGE_NAME missing" && exit 1
+
+        if [ -z "${{ inputs.METHOD }}" ]; then
+          echo "❌ METHOD missing"
+          exit 1
+        fi
+
+        if [ -z "${{ inputs.EC2_IP }}" ]; then
+          echo "❌ EC2_IP missing"
+          exit 1
+        fi
+
+        if [ -z "${{ inputs.IMAGE_NAME }}" ]; then
+          echo "❌ IMAGE_NAME missing"
+          exit 1
+        fi
+
+        echo "✅ Inputs validated"
 
     - name: Make scripts executable
       shell: bash
@@ -57,7 +71,10 @@ runs:
         mkdir -p ~/.ssh
 
         ssh-keyscan -H ${{ inputs.EC2_IP }} >> ~/.ssh/known_hosts 2>&1
-        [ $? -ne 0 ] && echo "❌ ssh-keyscan failed" && exit 1
+        if [ $? -ne 0 ]; then
+          echo "❌ ssh-keyscan failed"
+          exit 1
+        fi
 
         echo "✅ SSH configured"
 
@@ -66,11 +83,17 @@ runs:
       run: |
         if [ "${{ inputs.METHOD }}" != "EC2" ]; then exit 0; fi
 
-        [ ! -f "${{ inputs.IMAGE_NAME }}.tar" ] && echo "❌ Image file not found" && exit 1
+        if [ ! -f "${{ inputs.IMAGE_NAME }}.tar" ]; then
+          echo "❌ Image file not found: ${{ inputs.IMAGE_NAME }}.tar"
+          exit 1
+        fi
 
         echo "Copying image to EC2..."
         scp -i server_key.pem -o StrictHostKeyChecking=no ${{ inputs.IMAGE_NAME }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
-        [ $? -ne 0 ] && echo "❌ SCP failed" && exit 1
+        if [ $? -ne 0 ]; then
+          echo "❌ SCP failed"
+          exit 1
+        fi
 
         echo "Deploying..."
         ssh -i server_key.pem -o StrictHostKeyChecking=no ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} \
@@ -81,5 +104,9 @@ runs:
           IMAGE_NAME='${{ inputs.IMAGE_NAME }}.tar' \
           bash -s" < ${{ github.action_path }}/scripts/ec2_deploy.sh
 
-        [ $? -ne 0 ] && echo "❌ Deployment failed" && exit 1
+        if [ $? -ne 0 ]; then
+          echo "❌ Deployment failed"
+          exit 1
+        fi
+
         echo "✅ Deployed successfully"
