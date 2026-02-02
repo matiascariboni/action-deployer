@@ -1,12 +1,25 @@
 # Changelog
-
 All notable changes to this project will be documented in this file.
-
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.2] - 2025-10-16
+## [1.0.3] - 2025-02-02
+### Changed
+- Improved logging throughout the action with concise, essential debug information
+- Enhanced error messages with clear failure points and validation feedback
+- Added input validation step to catch missing parameters early
+- Streamlined deployment logs to show progress without excessive verbosity
 
+### Fixed
+- Better error handling in SSH setup step with explicit failure messages
+- Improved SCP and SSH error detection for clearer troubleshooting
+- Enhanced script execution with proper exit codes on failures
+
+### Documentation
+- Added better visibility of deployment parameters at action start
+- Improved log structure with progress indicators (✅) for successful steps
+
+## [1.0.2] - 2025-10-16
 ### Changed
 - Made `COMPOSE_PORTS` parameter optional - containers can now be deployed without port mappings
 - Made `COMPOSE_NETWORKS` parameter optional - containers can use Docker's default networking if not specified
@@ -21,7 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added clear documentation for optional parameters and their formats
 
 ## [1.0.1] - 2025-XX-XX
-
 ### Added
 - Initial support for `COMPOSE_VOLUMES` parameter
 
@@ -29,7 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved script error handling and logging
 
 ## [1.0.0] - 2025-XX-XX
-
 ### Added
 - Initial release
 - EC2 deployment support
@@ -45,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic formatting of Docker Compose files
 - Cleanup of unused Docker networks
 
+[1.0.3]: https://github.com/matiascariboni/action-deployer/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/matiascariboni/action-deployer/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/matiascariboni/action-deployer/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/matiascariboni/action-deployer/releases/tag/v1.0.0

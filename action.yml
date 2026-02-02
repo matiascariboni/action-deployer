@@ -1,6 +1,5 @@
 name: Deployer
 description: Composite action to deploy projects on different AWS services
-
 inputs:
   METHOD:
     required: true
@@ -29,39 +28,58 @@ inputs:
   COMPOSE_FILE_NAME:
     required: true
     description: Name for the new docker compose file to be created
-
 runs:
   using: "composite"
   steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        echo "Method: ${{ inputs.METHOD }} | Target: ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}"
+        echo "Image: ${{ inputs.IMAGE_NAME }} | Compose: ${{ inputs.COMPOSE_FILE_NAME }}"
+        [ -z "${{ inputs.METHOD }}" ] && echo "❌ METHOD missing" && exit 1
+        [ -z "${{ inputs.EC2_IP }}" ] && echo "❌ EC2_IP missing" && exit 1
+        [ -z "${{ inputs.IMAGE_NAME }}" ] && echo "❌ IMAGE_NAME missing" && exit 1
 
     - name: Make scripts executable
       shell: bash
       run: |
-        echo ✅ Method detected: ${{ inputs.METHOD }}
         chmod +x ${{ github.action_path }}/scripts/*.sh
+        echo "✅ Scripts ready"
 
-    - name: EC2 - Preparing PEM Key for SSH Connection
-      id: ec2_pem
+    - name: Setup SSH connection
       shell: bash
       run: |
-        if [ "${{ inputs.METHOD }}" = "EC2" ]; then
-          echo "${{ inputs.EC2_KEY }}" | tr -d '\r' > server_key.pem
-          chmod 600 server_key.pem
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ inputs.EC2_IP }} >> ~/.ssh/known_hosts
-        fi
+        if [ "${{ inputs.METHOD }}" != "EC2" ]; then exit 0; fi
 
-    - name: EC2 - Copy and deploy docker image
-      id: ec2_copy_deploy
+        echo "Setting up SSH to ${{ inputs.EC2_IP }}..."
+        echo "${{ inputs.EC2_KEY }}" | tr -d '\r' > server_key.pem
+        chmod 600 server_key.pem
+        mkdir -p ~/.ssh
+
+        ssh-keyscan -H ${{ inputs.EC2_IP }} >> ~/.ssh/known_hosts 2>&1
+        [ $? -ne 0 ] && echo "❌ ssh-keyscan failed" && exit 1
+
+        echo "✅ SSH configured"
+
+    - name: Deploy to EC2
       shell: bash
       run: |
-        if [ "${{ inputs.METHOD }}" = "EC2" ]; then
-          scp -i server_key.pem ${{ inputs.IMAGE_NAME }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
-          ssh -i server_key.pem ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} \
+        if [ "${{ inputs.METHOD }}" != "EC2" ]; then exit 0; fi
+
+        [ ! -f "${{ inputs.IMAGE_NAME }}.tar" ] && echo "❌ Image file not found" && exit 1
+
+        echo "Copying image to EC2..."
+        scp -i server_key.pem -o StrictHostKeyChecking=no ${{ inputs.IMAGE_NAME }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
+        [ $? -ne 0 ] && echo "❌ SCP failed" && exit 1
+
+        echo "Deploying..."
+        ssh -i server_key.pem -o StrictHostKeyChecking=no ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} \
           "COMPOSE_PORTS='${{ inputs.COMPOSE_PORTS }}' \
           COMPOSE_NETWORKS='${{ inputs.COMPOSE_NETWORKS }}' \
           COMPOSE_VOLUMES='${{ inputs.COMPOSE_VOLUMES }}' \
           COMPOSE_FILE_NAME='${{ inputs.COMPOSE_FILE_NAME }}' \
           IMAGE_NAME='${{ inputs.IMAGE_NAME }}.tar' \
           bash -s" < ${{ github.action_path }}/scripts/ec2_deploy.sh
-        fi
+
+        [ $? -ne 0 ] && echo "❌ Deployment failed" && exit 1
+        echo "✅ Deployed successfully"

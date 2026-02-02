@@ -1,4 +1,4 @@
-# Deploying application on an EC2 InstaNO_COLORe with Amazon Linux
+# Deploying application on an EC2 Instance with Amazon Linux
 
 ERROR_COLOR='\033[0;31m'
 WARNING_COLOR="\033[0;33m"
@@ -7,6 +7,7 @@ SERVICE_NAME=${IMAGE_NAME%.*}
 COMPOSE_IMAGE=$SERVICE_NAME
 
 allChecks() {
+    echo "=== Validating inputs ==="
     # Check inputs
     echo "IMAGE_NAME       = $IMAGE_NAME"
     echo "COMPOSE_PORTS    = $COMPOSE_PORTS"
@@ -35,67 +36,72 @@ allChecks() {
     done
 
     if [ ${#empty_vars[@]} -ne 0 ]; then
-        echo -e "${ERROR_COLOR}The following required variables are empty:${NC}"
+        echo -e "${ERROR_COLOR}The following required variables are empty:${NO_COLOR}"
         for var in "${empty_vars[@]}"; do
-            echo -e "${ERROR_COLOR}- $var${NC}"
+            echo -e "${ERROR_COLOR}- $var${NO_COLOR}"
         done
         exit 1
     fi
 
     for var_name in "${optional_vars[@]}"; do
         if [ -z "${!var_name+x}" ]; then
-            echo -e "${WARNING_COLOR}'$var_name' is not set.${NC}"
+            echo -e "${WARNING_COLOR}'$var_name' is not set.${NO_COLOR}"
         fi
     done
 
     # Check if Docker image has been really transfered
     if [ -f "./$IMAGE_NAME" ]; then
-        echo "$IMAGE_NAME detected"
+        echo "✅ $IMAGE_NAME detected"
     else
-        echo -e "${ERROR_COLOR}$IMAGE_NAME not detected, exiting${NO_COLOR}" >&2
+        echo -e "${ERROR_COLOR}❌ $IMAGE_NAME not detected, exiting${NO_COLOR}" >&2
         exit 1
     fi
 
     # Check if Docker are installed
     if ! command -v docker &>/dev/null; then
-        echo -e "${ERROR_COLOR}Docker not detected, installing it${NO_COLOR}"
+        echo -e "${WARNING_COLOR}Docker not detected, installing it${NO_COLOR}"
         sudo yum update -y
         sudo yum install docker -y
         sudo systemctl start docker
         sudo systemctl enable docker
         sudo usermod -a -G docker $(whoami)
+        echo "✅ Docker installed"
     else
-        echo "Docker already installed on the system"
+        echo "✅ Docker already installed"
     fi
 
     # Check if Docker Compose are installed
     if ! command -v docker-compose &>/dev/null; then
-        echo -e "${ERROR_COLOR}Docker Compose not detected, installing it${NO_COLOR}"
+        echo -e "${WARNING_COLOR}Docker Compose not detected, installing it${NO_COLOR}"
         sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
         sudo chmod +x /usr/local/bin/docker-compose
+        echo "✅ Docker Compose installed"
     else
-        echo "Docker Compose already installed on the system"
+        echo "✅ Docker Compose already installed"
     fi
 
-    # Check if docker-compose.yml exists, take in count this docker-compose will have another personalized name which come from the CICD as param when this script was executed
+    # Check if docker-compose.yml exists
     if [ -f ${COMPOSE_FILE_NAME} ]; then
-        echo "${COMPOSE_FILE_NAME} detected"
+        echo "✅ ${COMPOSE_FILE_NAME} detected"
     else
-        echo -e "${ERROR_COLOR}Docker compose yml file not detected, creating it${NO_COLOR}"
+        echo -e "${WARNING_COLOR}Docker compose yml file not detected, creating it${NO_COLOR}"
         echo -e "services:" >${COMPOSE_FILE_NAME}
     fi
 }
 
 loadDockerImage() {
-    # Deletion and mounting new Docker image. Then get the new tag for the docker-compose file
+    echo "=== Loading Docker image ==="
     docker-compose -f $COMPOSE_FILE_NAME down --rmi local
-    docker images -q $SERVICE_NAME | xargs docker rmi --force
+    docker images -q $SERVICE_NAME | xargs docker rmi --force 2>/dev/null || true
     docker load -i $IMAGE_NAME
+    [ $? -ne 0 ] && echo -e "${ERROR_COLOR}❌ Failed to load Docker image${NO_COLOR}" && exit 1
     rm -f $IMAGE_NAME
     COMPOSE_IMAGE+=$(printf ":%s" "$(docker images --format "{{.Tag}}" $SERVICE_NAME)")
+    echo "✅ Image loaded: $COMPOSE_IMAGE"
 }
 
 composeConfig() {
+    echo "=== Configuring docker-compose ==="
     # Check if comment flags (START_SERVICE_NAME & END_SERVICE_NAME are created. Case yes, delete all the lines between them and write the new configuration. Case no, insert the new configuration at the end of the file)
     if [[ -n "$COMPOSE_PORTS" ]]; then
         IFS=',' read -ra ports <<<"$COMPOSE_PORTS"
@@ -155,11 +161,12 @@ composeConfig() {
     # Insert service configuration
     if grep -q "# START_${SERVICE_NAME}" "$COMPOSE_FILE_NAME" && grep -q "# END_${SERVICE_NAME}" "$COMPOSE_FILE_NAME" && awk "/# START_${SERVICE_NAME}/ {start=NR} /# END_${SERVICE_NAME}/ {end=NR} END {exit start >= end}" "$COMPOSE_FILE_NAME"; then
         # Case config block already created, replace all the config between comment flags
-        # Use different delimiter to avoid conflicts with paths containing /
         perl -0777 -i -pe "s|# START_${SERVICE_NAME}.*# END_${SERVICE_NAME}|# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}|s" "$COMPOSE_FILE_NAME"
+        echo "✅ Updated existing service config"
     else
         # Case config block don't exist, append it at the end of the file
         echo -e "\n# START_${SERVICE_NAME}\n$COMPOSE_INSERT\n# END_${SERVICE_NAME}" >>"$COMPOSE_FILE_NAME"
+        echo "✅ Added new service config"
     fi
 
     # Erasing networks section
@@ -176,7 +183,7 @@ composeConfig() {
 
     # Re-insert network configuration ONLY if networks exist
     if [[ ${#listed_networks[@]} -eq 0 ]]; then
-        echo "No networks found in $COMPOSE_FILE_NAME. Skipping network section."
+        echo "No networks to configure"
     else
         formatted_networks=$(printf "networks:")
         for network in "${listed_networks[@]}"; do
@@ -186,13 +193,12 @@ composeConfig() {
     # START_NETWORK
     ${formatted_networks}
     # END_NETWORK" >>"$COMPOSE_FILE_NAME"
+        echo "✅ Networks configured"
     fi
 }
 
 composeFormatter() {
-    # Add the correct identation for each line using an identation level setted in "level" array. The dictionary asign an identation level for each start line pattern. Of course, not all keys are covered. And some keys are duplicated on an docker-compose.yml like "network". Which use a comment flag to identify the correct identation
-
-    echo Formatting $COMPOSE_FILE_NAME
+    echo "=== Formatting compose file ==="
 
     level=(0 2 4 6 8 10 12 14)
 
@@ -294,19 +300,16 @@ composeFormatter() {
 
     # Replace the original file with the new temp file formatted
     mv "$temp_file" "$COMPOSE_FILE_NAME"
-
-    echo $COMPOSE_FILE_NAME formatted
+    echo "✅ Compose file formatted"
 }
 
 dockerNetCleaner() {
-    # Detect and delete every Docker network on which no containers are connected
-    echo "Deleting unused Docker networks..."
+    echo "=== Cleaning unused networks ==="
     networks=$(docker network ls --format "{{.Name}}")
 
     for network in $networks; do
         # Skip predefined Docker networks
         if [[ "$network" == "bridge" || "$network" == "host" || "$network" == "none" ]]; then
-            echo "Skipping predefined network '$network'..."
             continue
         fi
 
@@ -319,15 +322,21 @@ dockerNetCleaner() {
             docker network rm "$network"
         fi
     done
+    echo "✅ Network cleanup complete"
 }
 
 composeUp() {
+    echo "=== Starting containers ==="
     docker-compose -f $COMPOSE_FILE_NAME up -d
+    [ $? -ne 0 ] && echo -e "${ERROR_COLOR}❌ Failed to start containers${NO_COLOR}" && exit 1
+    echo "✅ Containers started successfully"
 }
 
+echo "Starting deployment process..."
 allChecks
 loadDockerImage
 composeConfig
 composeFormatter
 dockerNetCleaner
 composeUp
+echo "🎉 Deployment completed!"
