@@ -53,7 +53,6 @@ For `action-deployer` to function correctly, it must be used in conjunction with
 ## Example Usage
 
 ### Basic deployment (without ports, networks, or volumes)
-
 ```yaml
 jobs:
   deploy:
@@ -79,7 +78,6 @@ jobs:
 ```
 
 ### Full deployment (with all optional parameters)
-
 ```yaml
 jobs:
   deploy:
@@ -109,18 +107,40 @@ jobs:
 
 ## How It Works
 
-1. The action first makes the necessary scripts executable.
-2. It then prepares the EC2 PEM key for SSH connections.
-3. Once the PEM key is prepared, it copies the Docker image file to the EC2 instance.
-4. It executes a script (`ec2_deploy.sh`) on the EC2 instance to:
-   - Install Docker and Docker Compose if not already installed.
-   - Load the Docker image and set up the Docker Compose configuration.
-   - Deploy the service with Docker Compose.
-5. The script intelligently handles optional parameters:
-   - If `COMPOSE_PORTS` is not provided, the container runs without port mappings
-   - If `COMPOSE_NETWORKS` is not provided, Docker's default networking is used
-   - If `COMPOSE_VOLUMES` is not provided, no volumes are mounted
-   - Network sections are only created in the Compose file when networks are actually used
+1. **Validation**: The action validates all required inputs and displays configuration details for debugging.
+2. **Script Preparation**: Makes deployment scripts executable.
+3. **SSH Setup**: Prepares the EC2 PEM key and establishes SSH connectivity to the target instance.
+4. **Image Transfer**: Copies the Docker image file to the EC2 instance via SCP.
+5. **Deployment**: Executes the deployment script (`ec2_deploy.sh`) on the EC2 instance to:
+   - Install Docker and Docker Compose if not already installed
+   - Load the Docker image and configure Docker Compose
+   - Deploy the service with proper error handling and progress tracking
+
+## Debugging
+
+The action provides detailed logging at each step:
+- Input parameter validation and display
+- SSH connection establishment
+- File transfer progress
+- Deployment phases (validation, image loading, configuration, formatting, network cleanup, container startup)
+
+All critical operations include error checking with clear failure messages to help troubleshoot deployment issues.
+
+## Optional Parameters
+
+The action intelligently handles optional parameters:
+- If `COMPOSE_PORTS` is not provided, the container runs without port mappings
+- If `COMPOSE_NETWORKS` is not provided, Docker's default networking is used
+- If `COMPOSE_VOLUMES` is not provided, no volumes are mounted
+- Network sections are only created in the Compose file when networks are actually used
+
+## Troubleshooting
+
+If deployment fails, check the GitHub Actions logs for:
+1. **Input validation errors**: Ensure all required secrets are set
+2. **SSH connectivity issues**: Verify EC2 security groups allow SSH from GitHub Actions IPs
+3. **File transfer errors**: Check EC2 instance disk space and permissions
+4. **Docker errors**: Review the deployment script output for Docker/Compose issues
 
 ## License
 
