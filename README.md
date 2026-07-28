@@ -4,13 +4,14 @@ A GitHub Action to deploy projects on different AWS services, specifically EC2 i
 
 ## Description
 
-`action-deployer` is a composite GitHub action designed to deploy Dockerized applications to AWS EC2 instances. The action integrates with `action-dockerization` to prepare the necessary inputs for deployment, such as Docker image creation and configuration.
+`action-deployer` is a composite GitHub action designed to deploy Dockerized applications to AWS EC2 instances. It builds the Docker Compose configuration (ports, networks, volumes) directly from Dockerfile comments and deploys it alongside the image produced by `action-dockerization`.
 
 This action is designed to automate the deployment process, allowing you to manage your EC2 infrastructure efficiently by running Docker containers on your instances with the help of Docker Compose.
 
 ## Requirements
 
-For `action-deployer` to function correctly, it must be used in conjunction with [action-dockerization](https://github.com/matiascariboni/action-dockerization), which generates the required inputs, such as the Docker image to be deployed and Docker Compose configurations.
+- This action must run after `actions/checkout` in the same job, since it reads the Dockerfile from the repository to derive the Docker Compose configuration.
+- It's typically used alongside [action-dockerization](https://github.com/matiascariboni/action-dockerization), which builds the Docker image (`IMAGE_NAME`) that this action copies and deploys. Pass the same `DOCKERFILE_PATH` to both actions.
 
 ## Inputs
 
@@ -34,84 +35,67 @@ For `action-deployer` to function correctly, it must be used in conjunction with
 - **Required**: `true`
 - **Description**: The name of the zipped Docker image file to be copied and deployed.
 
-### `COMPOSE_PORTS`
+### `DOCKERFILE_PATH`
 - **Required**: `false`
-- **Description**: The ports to be exposed for the Docker containers. Format: `'8080:80,3000:3000'`. If not provided, the container will run without exposed ports.
+- **Default**: `Dockerfile`
+- **Description**: Relative path to the Dockerfile to parse for ports, networks and volumes. Should be the same value passed to `action-dockerization`.
 
-### `COMPOSE_NETWORKS`
+### `COMPOSE_NAME`
 - **Required**: `false`
-- **Description**: The networks for Docker Compose. Format: `'network1,network2'`. If not provided, the container will use Docker's default networking.
+- **Description**: Base name for the generated Docker Compose file (`<COMPOSE_NAME>.yml`). Defaults to the repository name if not provided.
 
-### `COMPOSE_VOLUMES`
-- **Required**: `false`
-- **Description**: The volumes for Docker Compose. Format: `'/host/path:/container/path,volume_name:/data'`. If not provided, no volumes will be mounted.
+## Dockerfile comment syntax
 
-### `COMPOSE_FILE_NAME`
-- **Required**: `true`
-- **Description**: The name of the Docker Compose file that will be created.
+Ports, networks and volumes are derived automatically from comments in the Dockerfile pointed to by `DOCKERFILE_PATH`:
+
+```Dockerfile
+EXPOSE 3000
+# TO 80
+# NETWORK my-network
+# VOLUME /host/path:/container/path
+```
+
+- `EXPOSE 3000` + `# TO 80` → maps host port `80` to container port `3000`.
+- `# NETWORK my-network` → attaches the service to `my-network`.
+- `# VOLUME /host/path:/container/path` → bind-mounts `/host/path` into `/container/path` (only bind mounts are supported, not named volumes).
+
+Any of these can be omitted; the container is deployed without ports, without extra networks, and/or without volumes accordingly.
 
 ## Example Usage
 
-### Basic deployment (without ports, networks, or volumes)
 ```yaml
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
-    
-    - name: Dockerize project
-      uses: matiascariboni/action-dockerization@v1
-      with:
-        # Dockerization inputs like Dockerfile path, etc.
-    
-    - name: Deploy to EC2
-      uses: matiascariboni/action-deployer@v1
-      with:
-        METHOD: 'EC2'
-        EC2_IP: ${{ secrets.EC2_IP }}
-        EC2_USER: ${{ secrets.EC2_USER }}
-        EC2_KEY: ${{ secrets.EC2_KEY }}
-        IMAGE_NAME: 'my-docker-image'
-        COMPOSE_FILE_NAME: 'docker-compose.yml'
-```
+      uses: actions/checkout@v4
 
-### Full deployment (with all optional parameters)
-```yaml
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-    
     - name: Dockerize project
-      uses: matiascariboni/action-dockerization@v1
+      uses: matiascariboni/action-dockerization@v3
       with:
-        # Dockerization inputs like Dockerfile path, etc.
-    
+        IMAGE_ARCH: linux/amd64
+        DOCKERFILE_PATH: Dockerfile
+
     - name: Deploy to EC2
-      uses: matiascariboni/action-deployer@v1
+      uses: matiascariboni/action-deployer@v2
       with:
         METHOD: 'EC2'
         EC2_IP: ${{ secrets.EC2_IP }}
         EC2_USER: ${{ secrets.EC2_USER }}
         EC2_KEY: ${{ secrets.EC2_KEY }}
-        IMAGE_NAME: 'my-docker-image'
-        COMPOSE_PORTS: '8080:80,3000:3000'
-        COMPOSE_NETWORKS: 'my_network,backend_network'
-        COMPOSE_VOLUMES: '/var/log/app:/app/logs,app_data:/data'
-        COMPOSE_FILE_NAME: 'docker-compose.yml'
+        IMAGE_NAME: ${{ steps.dockerize.outputs.IMAGE_NAME }}
+        DOCKERFILE_PATH: Dockerfile
 ```
 
 ## How It Works
 
 1. **Validation**: The action validates all required inputs and displays configuration details for debugging.
 2. **Script Preparation**: Makes deployment scripts executable.
-3. **SSH Setup**: Prepares the EC2 PEM key and establishes SSH connectivity to the target instance.
-4. **Image Transfer**: Copies the Docker image file to the EC2 instance via SCP.
-5. **Deployment**: Executes the deployment script (`ec2_deploy.sh`) on the EC2 instance to:
+3. **Compose configuration**: Resolves the Docker Compose file name and parses `DOCKERFILE_PATH` for ports, networks and volumes.
+4. **SSH Setup**: Prepares the EC2 PEM key and establishes SSH connectivity to the target instance.
+5. **Image Transfer**: Copies the Docker image file to the EC2 instance via SCP.
+6. **Deployment**: Executes the deployment script (`ec2_deploy.sh`) on the EC2 instance to:
    - Install Docker and Docker Compose if not already installed
    - Load the Docker image and configure Docker Compose
    - Deploy the service with proper error handling and progress tracking
@@ -120,6 +104,7 @@ jobs:
 
 The action provides detailed logging at each step:
 - Input parameter validation and display
+- Dockerfile parsing (ports, networks, volumes) and compose file name resolution
 - SSH connection establishment
 - File transfer progress
 - Deployment phases (validation, image loading, configuration, formatting, network cleanup, container startup)
@@ -129,18 +114,19 @@ All critical operations include error checking with clear failure messages to he
 ## Optional Parameters
 
 The action intelligently handles optional parameters:
-- If `COMPOSE_PORTS` is not provided, the container runs without port mappings
-- If `COMPOSE_NETWORKS` is not provided, Docker's default networking is used
-- If `COMPOSE_VOLUMES` is not provided, no volumes are mounted
+- If no `# TO` port mappings are found, the container runs without port mappings
+- If no `# NETWORK` comments are found, Docker's default networking is used
+- If no `# VOLUME` comments are found, no volumes are mounted
 - Network sections are only created in the Compose file when networks are actually used
 
 ## Troubleshooting
 
 If deployment fails, check the GitHub Actions logs for:
 1. **Input validation errors**: Ensure all required secrets are set
-2. **SSH connectivity issues**: Verify EC2 security groups allow SSH from GitHub Actions IPs
-3. **File transfer errors**: Check EC2 instance disk space and permissions
-4. **Docker errors**: Review the deployment script output for Docker/Compose issues
+2. **Dockerfile not found**: Verify `DOCKERFILE_PATH` points to an existing file relative to the repo root
+3. **SSH connectivity issues**: Verify EC2 security groups allow SSH from GitHub Actions IPs
+4. **File transfer errors**: Check EC2 instance disk space and permissions
+5. **Docker errors**: Review the deployment script output for Docker/Compose issues
 
 ## License
 

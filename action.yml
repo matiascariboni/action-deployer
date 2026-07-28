@@ -16,18 +16,13 @@ inputs:
   IMAGE_NAME:
     required: true
     description: Zipped file with the Docker image to be copied and deployed
-  COMPOSE_PORTS:
+  DOCKERFILE_PATH:
     required: false
-    description: Formatted ports for a docker compose structure
-  COMPOSE_NETWORKS:
+    description: Relative path to the Dockerfile to parse for ports/networks/volumes (same value passed to action-dockerization)
+    default: 'Dockerfile'
+  COMPOSE_NAME:
     required: false
-    description: Formatted networks for a docker compose structure
-  COMPOSE_VOLUMES:
-    required: false
-    description: Formatted volumes for a docker compose structure
-  COMPOSE_FILE_NAME:
-    required: true
-    description: Name for the new docker compose file to be created
+    description: Base name for the docker compose file to be created (defaults to the repository name)
 runs:
   using: "composite"
   steps:
@@ -35,7 +30,7 @@ runs:
       shell: bash
       run: |
         echo "Method: ${{ inputs.METHOD }} | Target: ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}"
-        echo "Image: ${{ inputs.IMAGE_NAME }} | Compose: ${{ inputs.COMPOSE_FILE_NAME }}"
+        echo "Image: ${{ inputs.IMAGE_NAME }} | Dockerfile: ${{ inputs.DOCKERFILE_PATH }}"
 
         if [ -z "${{ inputs.METHOD }}" ]; then
           echo "❌ METHOD missing"
@@ -59,6 +54,35 @@ runs:
       run: |
         chmod +x ${{ github.action_path }}/scripts/*.sh
         echo "✅ Scripts ready"
+
+    - name: Resolve compose file name
+      id: dockerfile_config
+      shell: bash
+      run: ${{ github.action_path }}/scripts/dockerfile_config.sh
+      env:
+        DOCKERFILE_PATH: ${{ inputs.DOCKERFILE_PATH }}
+        COMPOSE_NAME: ${{ inputs.COMPOSE_NAME }}
+
+    - name: Parse ports from Dockerfile
+      id: port_formatter
+      shell: bash
+      run: ${{ github.action_path }}/scripts/port_formatter.sh
+      env:
+        DOCKERFILE_PATH: ${{ inputs.DOCKERFILE_PATH }}
+
+    - name: Parse networks from Dockerfile
+      id: net_formatter
+      shell: bash
+      run: ${{ github.action_path }}/scripts/net_formatter.sh
+      env:
+        DOCKERFILE_PATH: ${{ inputs.DOCKERFILE_PATH }}
+
+    - name: Parse volumes from Dockerfile
+      id: volume_formatter
+      shell: bash
+      run: ${{ github.action_path }}/scripts/volume_formatter.sh
+      env:
+        DOCKERFILE_PATH: ${{ inputs.DOCKERFILE_PATH }}
 
     - name: Setup SSH connection
       shell: bash
@@ -97,10 +121,10 @@ runs:
 
         echo "Deploying..."
         ssh -i server_key.pem -o StrictHostKeyChecking=no ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} \
-          "COMPOSE_PORTS='${{ inputs.COMPOSE_PORTS }}' \
-          COMPOSE_NETWORKS='${{ inputs.COMPOSE_NETWORKS }}' \
-          COMPOSE_VOLUMES='${{ inputs.COMPOSE_VOLUMES }}' \
-          COMPOSE_FILE_NAME='${{ inputs.COMPOSE_FILE_NAME }}' \
+          "COMPOSE_PORTS='${{ steps.port_formatter.outputs.COMPOSE_PORTS }}' \
+          COMPOSE_NETWORKS='${{ steps.net_formatter.outputs.COMPOSE_NETWORKS }}' \
+          COMPOSE_VOLUMES='${{ steps.volume_formatter.outputs.COMPOSE_VOLUMES }}' \
+          COMPOSE_FILE_NAME='${{ steps.dockerfile_config.outputs.COMPOSE_FILE_NAME }}' \
           IMAGE_NAME='${{ inputs.IMAGE_NAME }}.tar' \
           bash -s" < ${{ github.action_path }}/scripts/ec2_deploy.sh
 
