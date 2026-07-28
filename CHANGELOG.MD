@@ -3,6 +3,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-07-28
+### Added
+- **`ACTION`** optional input — `DELIVER`, `DEPLOY`, or omitted to do both in the same run.
+  - `DELIVER`: copies the image to the EC2 instance, loads it into Docker, and prepares/updates `docker-compose.yml`, without touching the currently running container.
+  - `DEPLOY`: force-recreates the running container of the given service with the image already loaded by a previous `DELIVER` run, then removes the old image. Doesn't copy the image or parse the Dockerfile.
+  - Lets the job with build/Dockerfile context (`DELIVER`) hand off to a separate job/run that only needs EC2 credentials and `IMAGE_NAME` to flip the switch (`DEPLOY`).
+- `scripts/ec2_deploy_run.sh` — new remote script that performs the `DEPLOY`-phase container swap and old-image cleanup.
+- `scripts/validate_inputs.sh` — input validation moved out of `action.yml` and into its own script, in line with how every other step already delegates to a script.
+
+### Changed
+- `scripts/ec2_deploy.sh` renamed to `scripts/ec2_deliver.sh` and scoped to the `DELIVER` phase only (image load + compose config/formatting); it no longer stops the running container or runs `docker-compose up`.
+- Container replacement is now done via `docker-compose up -d --no-deps --force-recreate <service>` (scoped to the deployed service) instead of `docker-compose down --rmi local` + `docker rmi` by repository name before loading the new image. This keeps the previous container running throughout `DELIVER`, and other services sharing the same `docker-compose.yml` are left untouched during `DEPLOY`.
+- `scripts/dockerfile_config.sh` only requires the Dockerfile to exist when `REQUIRE_DOCKERFILE` isn't `false` (set to `false` internally when `ACTION=DEPLOY`, since that phase doesn't parse the Dockerfile).
+- "Validate inputs" step now also checks `EC2_USER` and `EC2_KEY` are present (previously declared `required: true` but not actually checked there).
+
 ## [2.0.0] - 2026-07-28
 ### Added
 - **`DOCKERFILE_PATH`** optional input (default `'Dockerfile'`) — same name, semantics and default as the input of the same name in `action-dockerization`. Used to locate the Dockerfile this action parses for ports, networks and volumes.
@@ -78,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic formatting of Docker Compose files
 - Cleanup of unused Docker networks
 
+[2.7.0]: https://github.com/matiascariboni/action-deployer/compare/v2.0.0...v2.7.0
 [2.0.0]: https://github.com/matiascariboni/action-deployer/compare/v1.0.3...v2.0.0
 [1.0.3]: https://github.com/matiascariboni/action-deployer/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/matiascariboni/action-deployer/compare/v1.0.1...v1.0.2

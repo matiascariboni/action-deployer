@@ -44,6 +44,15 @@ This action is designed to automate the deployment process, allowing you to mana
 - **Required**: `false`
 - **Description**: Base name for the generated Docker Compose file (`<COMPOSE_NAME>.yml`). Defaults to the repository name if not provided.
 
+### `ACTION`
+- **Required**: `false`
+- **Description**: Which phase of the deployment to run: `DELIVER`, `DEPLOY`, or omitted to run both.
+  - `DELIVER`: copies the image to the EC2 instance, loads it into Docker, and prepares/updates `docker-compose.yml` with the parsed ports/networks/volumes. The currently running container is left untouched — no downtime.
+  - `DEPLOY`: swaps the running container for the image already loaded by a previous `DELIVER` run (`docker-compose up -d --force-recreate` scoped to that service) and removes the old image. Doesn't copy anything or parse the Dockerfile.
+  - Omitted: runs `DELIVER` followed by `DEPLOY` in the same job, matching the previous all-in-one behavior.
+
+  Splitting the two phases lets you prepare a release (e.g. build + deliver in one workflow run) and trigger the actual swap later, independently — without having to pass image/Dockerfile information to the job that just flips the switch.
+
 ## Dockerfile comment syntax
 
 Ports, networks and volumes are derived automatically from comments in the Dockerfile pointed to by `DOCKERFILE_PATH`:
@@ -90,15 +99,12 @@ jobs:
 
 ## How It Works
 
-1. **Validation**: The action validates all required inputs and displays configuration details for debugging.
+1. **Validation**: The action validates all required inputs (and `ACTION`, if provided) and displays configuration details for debugging.
 2. **Script Preparation**: Makes deployment scripts executable.
-3. **Compose configuration**: Resolves the Docker Compose file name and parses `DOCKERFILE_PATH` for ports, networks and volumes.
+3. **Compose configuration**: Resolves the Docker Compose file name. If `ACTION` is `DEPLOY`, the Dockerfile isn't required to exist and isn't parsed, since that phase doesn't need ports/networks/volumes.
 4. **SSH Setup**: Prepares the EC2 PEM key and establishes SSH connectivity to the target instance.
-5. **Image Transfer**: Copies the Docker image file to the EC2 instance via SCP.
-6. **Deployment**: Executes the deployment script (`ec2_deploy.sh`) on the EC2 instance to:
-   - Install Docker and Docker Compose if not already installed
-   - Load the Docker image and configure Docker Compose
-   - Deploy the service with proper error handling and progress tracking
+5. **Delivery** (skipped if `ACTION` is `DEPLOY`): copies the Docker image file to the EC2 instance via SCP, then runs `ec2_deliver.sh` remotely to install Docker/Docker Compose if needed, load the image, and prepare/update `docker-compose.yml`. The currently running container isn't touched.
+6. **Deploy** (skipped if `ACTION` is `DELIVER`): runs `ec2_deploy_run.sh` remotely to force-recreate the service's container with the already-loaded image and remove the old image, minimizing downtime.
 
 ## Debugging
 
@@ -107,9 +113,41 @@ The action provides detailed logging at each step:
 - Dockerfile parsing (ports, networks, volumes) and compose file name resolution
 - SSH connection establishment
 - File transfer progress
-- Deployment phases (validation, image loading, configuration, formatting, network cleanup, container startup)
+- Delivery phase (image loading, compose configuration, formatting)
+- Deploy phase (container swap, old image removal, network cleanup)
 
 All critical operations include error checking with clear failure messages to help troubleshoot deployment issues.
+
+## Splitting delivery and deployment
+
+By default (no `ACTION` input) the action delivers and deploys in the same run, same as before. To split them across separate jobs or workflow runs:
+
+```yaml
+# Job/run 1 — has the Dockerfile and the built image
+- name: Deliver to EC2
+  uses: matiascariboni/action-deployer@v2
+  with:
+    METHOD: 'EC2'
+    ACTION: 'DELIVER'
+    EC2_IP: ${{ secrets.EC2_IP }}
+    EC2_USER: ${{ secrets.EC2_USER }}
+    EC2_KEY: ${{ secrets.EC2_KEY }}
+    IMAGE_NAME: ${{ steps.dockerize.outputs.IMAGE_NAME }}
+    DOCKERFILE_PATH: Dockerfile
+
+# Job/run 2 — only needs EC2 credentials and IMAGE_NAME (used to identify the service), not the Dockerfile
+- name: Deploy on EC2
+  uses: matiascariboni/action-deployer@v2
+  with:
+    METHOD: 'EC2'
+    ACTION: 'DEPLOY'
+    EC2_IP: ${{ secrets.EC2_IP }}
+    EC2_USER: ${{ secrets.EC2_USER }}
+    EC2_KEY: ${{ secrets.EC2_KEY }}
+    IMAGE_NAME: ${{ steps.dockerize.outputs.IMAGE_NAME }}
+```
+
+`DEPLOY` only needs `IMAGE_NAME` to know which service to swap inside the shared `docker-compose.yml` — it doesn't re-copy or re-load anything, so the Dockerfile/build context don't need to be available in that job.
 
 ## Optional Parameters
 

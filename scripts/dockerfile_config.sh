@@ -1,10 +1,12 @@
 #!/bin/bash
 set -e
 
-RESOLVED_DOCKERFILE_PATH="./${DOCKERFILE_PATH}"
-if [[ ! -f "$RESOLVED_DOCKERFILE_PATH" ]]; then
-  echo "::error::Dockerfile not found: $RESOLVED_DOCKERFILE_PATH"
-  exit 1
+if [ "$REQUIRE_DOCKERFILE" != "false" ]; then
+  RESOLVED_DOCKERFILE_PATH="./${DOCKERFILE_PATH}"
+  if [[ ! -f "$RESOLVED_DOCKERFILE_PATH" ]]; then
+    echo "::error::Dockerfile not found: $RESOLVED_DOCKERFILE_PATH"
+    exit 1
+  fi
 fi
 
 if [ -z "$COMPOSE_NAME" ]; then

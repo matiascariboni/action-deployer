@@ -1,4 +1,5 @@
-# Deploying application on an EC2 Instance with Amazon Linux
+# Delivering a Docker image + Compose config on an EC2 Instance with Amazon Linux
+# Loads the new image and prepares docker-compose.yml, without touching the currently running container.
 
 ERROR_COLOR='\033[0;31m'
 WARNING_COLOR="\033[0;33m"
@@ -91,8 +92,10 @@ allChecks() {
 
 loadDockerImage() {
     echo "=== Loading Docker image ==="
-    docker-compose -f $COMPOSE_FILE_NAME down --rmi local
-    docker images -q $SERVICE_NAME | xargs docker rmi --force 2>/dev/null || true
+    # NOTE: the running container (if any) is left untouched here on purpose.
+    # `docker load` retags the newly loaded image with the same repo:tag, which just
+    # leaves the previous image dangling (still usable by whatever container runs it).
+    # Swapping the running container to the new image is the DEPLOY phase's job.
     docker load -i $IMAGE_NAME
     [ $? -ne 0 ] && echo -e "${ERROR_COLOR}❌ Failed to load Docker image${NO_COLOR}" && exit 1
     rm -f $IMAGE_NAME
@@ -303,40 +306,9 @@ composeFormatter() {
     echo "✅ Compose file formatted"
 }
 
-dockerNetCleaner() {
-    echo "=== Cleaning unused networks ==="
-    networks=$(docker network ls --format "{{.Name}}")
-
-    for network in $networks; do
-        # Skip predefined Docker networks
-        if [[ "$network" == "bridge" || "$network" == "host" || "$network" == "none" ]]; then
-            continue
-        fi
-
-        # Check if the network has containers connected
-        containers=$(docker network inspect "$network" --format '{{range .Containers}}{{.Name}} {{end}}')
-
-        # If there are no containers in the network, delete it
-        if [ -z "$containers" ]; then
-            echo "Removing '$network'..."
-            docker network rm "$network"
-        fi
-    done
-    echo "✅ Network cleanup complete"
-}
-
-composeUp() {
-    echo "=== Starting containers ==="
-    docker-compose -f $COMPOSE_FILE_NAME up -d
-    [ $? -ne 0 ] && echo -e "${ERROR_COLOR}❌ Failed to start containers${NO_COLOR}" && exit 1
-    echo "✅ Containers started successfully"
-}
-
-echo "Starting deployment process..."
+echo "Starting delivery process..."
 allChecks
 loadDockerImage
 composeConfig
 composeFormatter
-dockerNetCleaner
-composeUp
-echo "🎉 Deployment completed!"
+echo "🎉 Delivery completed! Image loaded and docker-compose.yml ready. Run with ACTION=DEPLOY to start it."

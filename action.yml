@@ -23,37 +23,30 @@ inputs:
   COMPOSE_NAME:
     required: false
     description: Base name for the docker compose file to be created (defaults to the repository name)
+  ACTION:
+    required: false
+    description: "DELIVER copies and loads the new image on the EC2 and prepares the docker compose file, without touching the running service. DEPLOY swaps the running service's container for the already-loaded image and removes the old image. If omitted, both are done in the same run."
 runs:
   using: "composite"
   steps:
-    - name: Validate inputs
-      shell: bash
-      run: |
-        echo "Method: ${{ inputs.METHOD }} | Target: ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}"
-        echo "Image: ${{ inputs.IMAGE_NAME }} | Dockerfile: ${{ inputs.DOCKERFILE_PATH }}"
-
-        if [ -z "${{ inputs.METHOD }}" ]; then
-          echo "❌ METHOD missing"
-          exit 1
-        fi
-
-        if [ -z "${{ inputs.EC2_IP }}" ]; then
-          echo "❌ EC2_IP missing"
-          exit 1
-        fi
-
-        if [ -z "${{ inputs.IMAGE_NAME }}" ]; then
-          echo "❌ IMAGE_NAME missing"
-          exit 1
-        fi
-
-        echo "✅ Inputs validated"
-
     - name: Make scripts executable
       shell: bash
       run: |
         chmod +x ${{ github.action_path }}/scripts/*.sh
         echo "✅ Scripts ready"
+
+    - name: Validate inputs
+      id: validate_inputs
+      shell: bash
+      run: ${{ github.action_path }}/scripts/validate_inputs.sh
+      env:
+        METHOD: ${{ inputs.METHOD }}
+        EC2_IP: ${{ inputs.EC2_IP }}
+        EC2_USER: ${{ inputs.EC2_USER }}
+        EC2_KEY: ${{ inputs.EC2_KEY }}
+        IMAGE_NAME: ${{ inputs.IMAGE_NAME }}
+        DOCKERFILE_PATH: ${{ inputs.DOCKERFILE_PATH }}
+        ACTION: ${{ inputs.ACTION }}
 
     - name: Resolve compose file name
       id: dockerfile_config
@@ -62,9 +55,11 @@ runs:
       env:
         DOCKERFILE_PATH: ${{ inputs.DOCKERFILE_PATH }}
         COMPOSE_NAME: ${{ inputs.COMPOSE_NAME }}
+        REQUIRE_DOCKERFILE: ${{ steps.validate_inputs.outputs.ACTION == '' || steps.validate_inputs.outputs.ACTION == 'DELIVER' }}
 
     - name: Parse ports from Dockerfile
       id: port_formatter
+      if: steps.validate_inputs.outputs.ACTION == '' || steps.validate_inputs.outputs.ACTION == 'DELIVER'
       shell: bash
       run: ${{ github.action_path }}/scripts/port_formatter.sh
       env:
@@ -72,6 +67,7 @@ runs:
 
     - name: Parse networks from Dockerfile
       id: net_formatter
+      if: steps.validate_inputs.outputs.ACTION == '' || steps.validate_inputs.outputs.ACTION == 'DELIVER'
       shell: bash
       run: ${{ github.action_path }}/scripts/net_formatter.sh
       env:
@@ -79,6 +75,7 @@ runs:
 
     - name: Parse volumes from Dockerfile
       id: volume_formatter
+      if: steps.validate_inputs.outputs.ACTION == '' || steps.validate_inputs.outputs.ACTION == 'DELIVER'
       shell: bash
       run: ${{ github.action_path }}/scripts/volume_formatter.sh
       env:
@@ -102,7 +99,8 @@ runs:
 
         echo "✅ SSH configured"
 
-    - name: Deploy to EC2
+    - name: Deliver image to EC2
+      if: steps.validate_inputs.outputs.ACTION == '' || steps.validate_inputs.outputs.ACTION == 'DELIVER'
       shell: bash
       run: |
         if [ "${{ inputs.METHOD }}" != "EC2" ]; then exit 0; fi
@@ -119,14 +117,33 @@ runs:
           exit 1
         fi
 
-        echo "Deploying..."
+        echo "Delivering..."
         ssh -i server_key.pem -o StrictHostKeyChecking=no ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} \
           "COMPOSE_PORTS='${{ steps.port_formatter.outputs.COMPOSE_PORTS }}' \
           COMPOSE_NETWORKS='${{ steps.net_formatter.outputs.COMPOSE_NETWORKS }}' \
           COMPOSE_VOLUMES='${{ steps.volume_formatter.outputs.COMPOSE_VOLUMES }}' \
           COMPOSE_FILE_NAME='${{ steps.dockerfile_config.outputs.COMPOSE_FILE_NAME }}' \
           IMAGE_NAME='${{ inputs.IMAGE_NAME }}.tar' \
-          bash -s" < ${{ github.action_path }}/scripts/ec2_deploy.sh
+          bash -s" < ${{ github.action_path }}/scripts/ec2_deliver.sh
+
+        if [ $? -ne 0 ]; then
+          echo "❌ Delivery failed"
+          exit 1
+        fi
+
+        echo "✅ Delivered successfully"
+
+    - name: Deploy on EC2
+      if: steps.validate_inputs.outputs.ACTION == '' || steps.validate_inputs.outputs.ACTION == 'DEPLOY'
+      shell: bash
+      run: |
+        if [ "${{ inputs.METHOD }}" != "EC2" ]; then exit 0; fi
+
+        echo "Deploying..."
+        ssh -i server_key.pem -o StrictHostKeyChecking=no ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} \
+          "COMPOSE_FILE_NAME='${{ steps.dockerfile_config.outputs.COMPOSE_FILE_NAME }}' \
+          SERVICE_NAME='${{ inputs.IMAGE_NAME }}' \
+          bash -s" < ${{ github.action_path }}/scripts/ec2_deploy_run.sh
 
         if [ $? -ne 0 ]; then
           echo "❌ Deployment failed"
