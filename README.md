@@ -57,6 +57,11 @@ This action is designed to automate the deployment process, allowing you to mana
 
   Splitting the two phases lets you prepare a release (e.g. build + deliver in one workflow run) and trigger the actual swap later, independently — without having to pass image/Dockerfile information to the job that just flips the switch.
 
+## Outputs
+
+### `IMAGE_URI`
+- **Description**: Full URI of the image pushed to ECR (`account.dkr.ecr.region.amazonaws.com/repository:tag`). Only set when `METHOD` is `ECR` and the `DELIVER` phase ran; empty otherwise. See [Delivering to ECR](#delivering-to-ecr).
+
 ## Dockerfile comment syntax
 
 Ports, networks and volumes are derived automatically from comments in the Dockerfile pointed to by `DOCKERFILE_PATH`:
@@ -160,6 +165,8 @@ By default (no `ACTION` input) the action delivers and deploys in the same run, 
 
 AWS credentials and region must already be configured in the job before this action runs — this action doesn't accept AWS credentials as inputs, it relies on whatever is already configured (e.g. by [`aws-actions/configure-aws-credentials`](https://github.com/aws-actions/configure-aws-credentials)). The image is pushed with the same tag it already has after being loaded from `IMAGE_TAR_PATH` — there's no separate `IMAGE_TAG` input.
 
+The action exposes the pushed image's URI as the `IMAGE_URI` output (e.g. `123456789012.dkr.ecr.us-east-1.amazonaws.com/my-app:latest`), so downstream steps/jobs can reference it (e.g. to deploy it on ECS/EKS/Lambda) without reconstructing the URI themselves.
+
 ```yaml
 jobs:
   deliver:
@@ -185,12 +192,16 @@ jobs:
         aws-region: us-east-1
 
     - name: Deliver to ECR
+      id: deliver
       uses: matiascariboni/action-deployer@v2
       with:
         METHOD: 'ECR'
         ACTION: 'DELIVER'
         ECR_REPOSITORY: 'my-app'
         IMAGE_TAR_PATH: ${{ github.workspace }}/${{ steps.dockerize.outputs.IMAGE_NAME }}.tar
+
+    - name: Use the pushed image URI
+      run: echo "Pushed ${{ steps.deliver.outputs.IMAGE_URI }}"
 ```
 
 ## Optional Parameters

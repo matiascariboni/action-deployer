@@ -49,4 +49,5 @@ echo "=== Tagging and pushing $ECR_IMAGE ==="
 docker tag "$LOCAL_IMAGE" "$ECR_IMAGE"
 docker push "$ECR_IMAGE"
 
+echo "IMAGE_URI=$ECR_IMAGE" >> $GITHUB_OUTPUT
 echo "🎉 Image pushed to ECR: $ECR_IMAGE"

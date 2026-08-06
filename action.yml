@@ -29,6 +29,10 @@ inputs:
   ACTION:
     required: false
     description: "DELIVER copies and loads the new image on the EC2 and prepares the docker compose file, without touching the running service. DEPLOY swaps the running service's container for the already-loaded image and removes the old image. If omitted, both are done in the same run."
+outputs:
+  IMAGE_URI:
+    description: Full URI of the image pushed to ECR (account.dkr.ecr.region.amazonaws.com/repository:tag). Only set when METHOD is 'ECR' and the DELIVER phase ran.
+    value: ${{ steps.ecr_deliver.outputs.IMAGE_URI }}
 runs:
   using: "composite"
   steps:
@@ -138,6 +142,7 @@ runs:
         echo "✅ Delivered successfully"
 
     - name: Deliver image to ECR
+      id: ecr_deliver
       if: steps.validate_inputs.outputs.ACTION == '' || steps.validate_inputs.outputs.ACTION == 'DELIVER'
       shell: bash
       run: ${{ github.action_path }}/scripts/ecr_deliver.sh

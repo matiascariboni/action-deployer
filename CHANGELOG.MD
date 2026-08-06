@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-08-06
+### Added
+- **`IMAGE_URI`** action output — full URI of the image pushed to ECR (`account.dkr.ecr.region.amazonaws.com/repository:tag`), set by `scripts/ecr_deliver.sh` and exposed via the new `ecr_deliver` step id, so downstream steps/jobs can reference the pushed image without reconstructing the URI themselves. Only set when `METHOD` is `ECR` and the `DELIVER` phase ran.
+
 ## [2.9.0] - 2026-08-06
 ### Added
 - **`METHOD: 'ECR'`** — new delivery method that pushes the image to an Amazon ECR repository instead of an EC2 instance. Only applies to the `DELIVER` phase; `ACTION: 'DEPLOY'` is a no-op when `METHOD` is `ECR`.
@@ -106,6 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic formatting of Docker Compose files
 - Cleanup of unused Docker networks
 
+[2.9.1]: https://github.com/matiascariboni/action-deployer/compare/v2.9.0...v2.9.1
 [2.9.0]: https://github.com/matiascariboni/action-deployer/compare/v2.8.0...v2.9.0
 [2.7.0]: https://github.com/matiascariboni/action-deployer/compare/v2.0.0...v2.7.0
 [2.0.0]: https://github.com/matiascariboni/action-deployer/compare/v1.0.3...v2.0.0
