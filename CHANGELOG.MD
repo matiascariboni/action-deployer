@@ -3,6 +3,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-08-06
+### Added
+- **`METHOD: 'ECR'`** — new delivery method that pushes the image to an Amazon ECR repository instead of an EC2 instance. Only applies to the `DELIVER` phase; `ACTION: 'DEPLOY'` is a no-op when `METHOD` is `ECR`.
+- **`ECR_REPOSITORY`** optional input (required when `METHOD` is `ECR`) — name of the ECR repository to push to. Created automatically via `aws ecr create-repository` if it doesn't already exist.
+- `scripts/ecr_deliver.sh` — new local script (no SSH involved) that loads the image from `IMAGE_TAR_PATH`, resolves the AWS account/region from the already-configured environment (e.g. via `aws-actions/configure-aws-credentials`), logs in to ECR, and tags/pushes the image using the tag it already carries.
+
+### Changed
+- `scripts/validate_inputs.sh` now validates `METHOD` against the known values (`EC2`, `ECR`) and only requires `EC2_IP`/`EC2_USER`/`EC2_KEY` when `METHOD` is `EC2` (previously required unconditionally, even though only `EC2` was supported).
+
 ## [2.8.0] - 2026-08-06
 ### Changed
 - **Breaking:** `IMAGE_NAME` input replaced with `IMAGE_TAR_PATH`. It now must be an absolute path to the `.tar` file instead of just a base filename assumed to sit in the runner's working directory. The service/container name used by `DELIVER`/`DEPLOY` is now derived from the basename of that path (stripping `.tar`), same as before.
@@ -97,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic formatting of Docker Compose files
 - Cleanup of unused Docker networks
 
+[2.9.0]: https://github.com/matiascariboni/action-deployer/compare/v2.8.0...v2.9.0
 [2.7.0]: https://github.com/matiascariboni/action-deployer/compare/v2.0.0...v2.7.0
 [2.0.0]: https://github.com/matiascariboni/action-deployer/compare/v1.0.3...v2.0.0
 [1.0.3]: https://github.com/matiascariboni/action-deployer/compare/v1.0.2...v1.0.3

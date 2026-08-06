@@ -2,28 +2,41 @@
 set -e
 
 ACTION_UPPER=$(echo "$ACTION" | tr '[:lower:]' '[:upper:]')
+METHOD_UPPER=$(echo "$METHOD" | tr '[:lower:]' '[:upper:]')
 
-echo "Method: $METHOD | Target: $EC2_USER@$EC2_IP"
+echo "Method: $METHOD_UPPER | Target: $EC2_USER@$EC2_IP"
 echo "Image: $IMAGE_TAR_PATH | Dockerfile: $DOCKERFILE_PATH"
 echo "Action: ${ACTION_UPPER:-<both>}"
 
-if [ -z "$METHOD" ]; then
+if [ -z "$METHOD_UPPER" ]; then
   echo "❌ METHOD missing"
   exit 1
 fi
 
-if [ -z "$EC2_IP" ]; then
-  echo "❌ EC2_IP missing"
+if [ "$METHOD_UPPER" != "EC2" ] && [ "$METHOD_UPPER" != "ECR" ]; then
+  echo "❌ METHOD must be either 'EC2' or 'ECR', got: '$METHOD'"
   exit 1
 fi
 
-if [ -z "$EC2_USER" ]; then
-  echo "❌ EC2_USER missing"
-  exit 1
+if [ "$METHOD_UPPER" = "EC2" ]; then
+  if [ -z "$EC2_IP" ]; then
+    echo "❌ EC2_IP missing"
+    exit 1
+  fi
+
+  if [ -z "$EC2_USER" ]; then
+    echo "❌ EC2_USER missing"
+    exit 1
+  fi
+
+  if [ -z "$EC2_KEY" ]; then
+    echo "❌ EC2_KEY missing"
+    exit 1
+  fi
 fi
 
-if [ -z "$EC2_KEY" ]; then
-  echo "❌ EC2_KEY missing"
+if [ "$METHOD_UPPER" = "ECR" ] && [ -z "$ECR_REPOSITORY" ]; then
+  echo "❌ ECR_REPOSITORY missing"
   exit 1
 fi
 

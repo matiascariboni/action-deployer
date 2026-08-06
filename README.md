@@ -17,7 +17,7 @@ This action is designed to automate the deployment process, allowing you to mana
 
 ### `METHOD`
 - **Required**: `true`
-- **Description**: The deployment method. Currently, "EC2" is supported.
+- **Description**: The delivery/deployment method. `EC2` delivers and deploys the image to an EC2 instance via SCP/SSH. `ECR` pushes the image to an Amazon ECR repository (`DELIVER` phase only — see [Delivering to ECR](#delivering-to-ecr)).
 
 ### `EC2_IP`
 - **Required**: `true`
@@ -34,6 +34,10 @@ This action is designed to automate the deployment process, allowing you to mana
 ### `IMAGE_TAR_PATH`
 - **Required**: `true`
 - **Description**: Absolute path to the `.tar` file with the Docker image to be copied and deployed.
+
+### `ECR_REPOSITORY`
+- **Required**: `false` (required when `METHOD` is `ECR`)
+- **Description**: Name of the Amazon ECR repository to push the image to. Created automatically if it doesn't already exist. AWS credentials and region must already be configured in the job before this step (e.g. via [`aws-actions/configure-aws-credentials`](https://github.com/aws-actions/configure-aws-credentials)).
 
 ### `DOCKERFILE_PATH`
 - **Required**: `false`
@@ -103,8 +107,8 @@ jobs:
 2. **Script Preparation**: Makes deployment scripts executable.
 3. **Compose configuration**: Resolves the Docker Compose file name. If `ACTION` is `DEPLOY`, the Dockerfile isn't required to exist and isn't parsed, since that phase doesn't need ports/networks/volumes.
 4. **SSH Setup**: Prepares the EC2 PEM key and establishes SSH connectivity to the target instance.
-5. **Delivery** (skipped if `ACTION` is `DEPLOY`): copies the Docker image file to the EC2 instance via SCP, then runs `ec2_deliver.sh` remotely to install Docker/Docker Compose if needed, load the image, and prepare/update `docker-compose.yml`. The currently running container isn't touched.
-6. **Deploy** (skipped if `ACTION` is `DELIVER`): runs `ec2_deploy_run.sh` remotely to force-recreate the service's container with the already-loaded image and remove the old image, minimizing downtime.
+5. **Delivery** (skipped if `ACTION` is `DEPLOY`): if `METHOD` is `EC2`, copies the Docker image file to the EC2 instance via SCP, then runs `ec2_deliver.sh` remotely to install Docker/Docker Compose if needed, load the image, and prepare/update `docker-compose.yml`. If `METHOD` is `ECR`, runs `ecr_deliver.sh` locally to load the image, create the ECR repository if needed, and push the image to it. Either way, the currently running container isn't touched.
+6. **Deploy** (skipped if `ACTION` is `DELIVER`, and a no-op if `METHOD` is `ECR`): runs `ec2_deploy_run.sh` remotely to force-recreate the service's container with the already-loaded image and remove the old image, minimizing downtime.
 
 ## Debugging
 
@@ -149,6 +153,45 @@ By default (no `ACTION` input) the action delivers and deploys in the same run, 
 ```
 
 `DEPLOY` only needs `IMAGE_TAR_PATH` (its basename, without `.tar`) to know which service to swap inside the shared `docker-compose.yml` — it doesn't re-copy or re-load anything, so the Dockerfile/build context don't need to be available in that job.
+
+## Delivering to ECR
+
+`METHOD: 'ECR'` pushes the image built by `action-dockerization` to an Amazon ECR repository instead of an EC2 instance. Only the `DELIVER` phase applies to this method — `ACTION: 'DEPLOY'` is a no-op when `METHOD` is `ECR`.
+
+AWS credentials and region must already be configured in the job before this action runs — this action doesn't accept AWS credentials as inputs, it relies on whatever is already configured (e.g. by [`aws-actions/configure-aws-credentials`](https://github.com/aws-actions/configure-aws-credentials)). The image is pushed with the same tag it already has after being loaded from `IMAGE_TAR_PATH` — there's no separate `IMAGE_TAG` input.
+
+```yaml
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Dockerize project
+      id: dockerize
+      uses: matiascariboni/action-dockerization@v3
+      with:
+        IMAGE_ARCH: linux/amd64
+        DOCKERFILE_PATH: Dockerfile
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: us-east-1
+
+    - name: Deliver to ECR
+      uses: matiascariboni/action-deployer@v2
+      with:
+        METHOD: 'ECR'
+        ACTION: 'DELIVER'
+        ECR_REPOSITORY: 'my-app'
+        IMAGE_TAR_PATH: ${{ github.workspace }}/${{ steps.dockerize.outputs.IMAGE_NAME }}.tar
+```
 
 ## Optional Parameters
 

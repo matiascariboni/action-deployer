@@ -3,7 +3,7 @@ description: Composite action to deploy projects on different AWS services
 inputs:
   METHOD:
     required: true
-    description: Which method will be used to deploy the code (EC2 is the only one on this first stage)
+    description: Which method will be used to deliver/deploy the code. 'EC2' delivers and deploys via SSH/SCP. 'ECR' pushes the image to an Amazon ECR repository (DELIVER phase only).
   EC2_IP:
     required: true
     description: IP to connecto to the EC2 server. Ex. ec2-xx-xxx-xxx-x.compute-4.amazonaws.com
@@ -16,6 +16,9 @@ inputs:
   IMAGE_TAR_PATH:
     required: true
     description: Absolute path to the .tar file with the Docker image to be copied and deployed
+  ECR_REPOSITORY:
+    required: false
+    description: Name of the Amazon ECR repository to push the image to (required when METHOD is 'ECR'). Created automatically if it doesn't exist. AWS credentials/region must already be configured in the job, e.g. via aws-actions/configure-aws-credentials.
   DOCKERFILE_PATH:
     required: false
     description: Relative path to the Dockerfile to parse for ports/networks/volumes (same value passed to action-dockerization)
@@ -47,6 +50,7 @@ runs:
         IMAGE_TAR_PATH: ${{ inputs.IMAGE_TAR_PATH }}
         DOCKERFILE_PATH: ${{ inputs.DOCKERFILE_PATH }}
         ACTION: ${{ inputs.ACTION }}
+        ECR_REPOSITORY: ${{ inputs.ECR_REPOSITORY }}
 
     - name: Resolve compose file name
       id: dockerfile_config
@@ -132,6 +136,15 @@ runs:
         fi
 
         echo "✅ Delivered successfully"
+
+    - name: Deliver image to ECR
+      if: steps.validate_inputs.outputs.ACTION == '' || steps.validate_inputs.outputs.ACTION == 'DELIVER'
+      shell: bash
+      run: ${{ github.action_path }}/scripts/ecr_deliver.sh
+      env:
+        METHOD: ${{ inputs.METHOD }}
+        IMAGE_TAR_PATH: ${{ inputs.IMAGE_TAR_PATH }}
+        ECR_REPOSITORY: ${{ inputs.ECR_REPOSITORY }}
 
     - name: Deploy on EC2
       if: steps.validate_inputs.outputs.ACTION == '' || steps.validate_inputs.outputs.ACTION == 'DEPLOY'
