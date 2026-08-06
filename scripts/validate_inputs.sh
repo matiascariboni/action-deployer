@@ -4,7 +4,7 @@ set -e
 ACTION_UPPER=$(echo "$ACTION" | tr '[:lower:]' '[:upper:]')
 
 echo "Method: $METHOD | Target: $EC2_USER@$EC2_IP"
-echo "Image: $IMAGE_NAME | Dockerfile: $DOCKERFILE_PATH"
+echo "Image: $IMAGE_TAR_PATH | Dockerfile: $DOCKERFILE_PATH"
 echo "Action: ${ACTION_UPPER:-<both>}"
 
 if [ -z "$METHOD" ]; then
@@ -27,10 +27,18 @@ if [ -z "$EC2_KEY" ]; then
   exit 1
 fi
 
-if [ -z "$IMAGE_NAME" ]; then
-  echo "❌ IMAGE_NAME missing"
+if [ -z "$IMAGE_TAR_PATH" ]; then
+  echo "❌ IMAGE_TAR_PATH missing"
   exit 1
 fi
+
+case "$IMAGE_TAR_PATH" in
+  /*) ;;
+  *)
+    echo "❌ IMAGE_TAR_PATH must be an absolute path, got: '$IMAGE_TAR_PATH'"
+    exit 1
+    ;;
+esac
 
 if [ -n "$ACTION_UPPER" ] && [ "$ACTION_UPPER" != "DELIVER" ] && [ "$ACTION_UPPER" != "DEPLOY" ]; then
   echo "❌ ACTION must be either 'DELIVER' or 'DEPLOY' (or omitted to do both), got: '$ACTION'"

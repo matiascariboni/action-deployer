@@ -11,7 +11,7 @@ This action is designed to automate the deployment process, allowing you to mana
 ## Requirements
 
 - This action must run after `actions/checkout` in the same job, since it reads the Dockerfile from the repository to derive the Docker Compose configuration.
-- It's typically used alongside [action-dockerization](https://github.com/matiascariboni/action-dockerization), which builds the Docker image (`IMAGE_NAME`) that this action copies and deploys. Pass the same `DOCKERFILE_PATH` to both actions.
+- It's typically used alongside [action-dockerization](https://github.com/matiascariboni/action-dockerization), which builds the Docker image tar (`IMAGE_TAR_PATH`) that this action copies and deploys. Pass the same `DOCKERFILE_PATH` to both actions.
 
 ## Inputs
 
@@ -31,9 +31,9 @@ This action is designed to automate the deployment process, allowing you to mana
 - **Required**: `true`
 - **Description**: The PEM key for SSH access to the EC2 instance.
 
-### `IMAGE_NAME`
+### `IMAGE_TAR_PATH`
 - **Required**: `true`
-- **Description**: The name of the zipped Docker image file to be copied and deployed.
+- **Description**: Absolute path to the `.tar` file with the Docker image to be copied and deployed.
 
 ### `DOCKERFILE_PATH`
 - **Required**: `false`
@@ -93,7 +93,7 @@ jobs:
         EC2_IP: ${{ secrets.EC2_IP }}
         EC2_USER: ${{ secrets.EC2_USER }}
         EC2_KEY: ${{ secrets.EC2_KEY }}
-        IMAGE_NAME: ${{ steps.dockerize.outputs.IMAGE_NAME }}
+        IMAGE_TAR_PATH: ${{ github.workspace }}/${{ steps.dockerize.outputs.IMAGE_NAME }}.tar
         DOCKERFILE_PATH: Dockerfile
 ```
 
@@ -132,10 +132,11 @@ By default (no `ACTION` input) the action delivers and deploys in the same run, 
     EC2_IP: ${{ secrets.EC2_IP }}
     EC2_USER: ${{ secrets.EC2_USER }}
     EC2_KEY: ${{ secrets.EC2_KEY }}
-    IMAGE_NAME: ${{ steps.dockerize.outputs.IMAGE_NAME }}
+    IMAGE_TAR_PATH: ${{ github.workspace }}/${{ steps.dockerize.outputs.IMAGE_NAME }}.tar
     DOCKERFILE_PATH: Dockerfile
 
-# Job/run 2 — only needs EC2 credentials and IMAGE_NAME (used to identify the service), not the Dockerfile
+# Job/run 2 — only needs EC2 credentials and IMAGE_TAR_PATH (its basename identifies the service), not the Dockerfile.
+# The tar file itself doesn't need to exist on this runner — only the path's basename is used.
 - name: Deploy on EC2
   uses: matiascariboni/action-deployer@v2
   with:
@@ -144,10 +145,10 @@ By default (no `ACTION` input) the action delivers and deploys in the same run, 
     EC2_IP: ${{ secrets.EC2_IP }}
     EC2_USER: ${{ secrets.EC2_USER }}
     EC2_KEY: ${{ secrets.EC2_KEY }}
-    IMAGE_NAME: ${{ steps.dockerize.outputs.IMAGE_NAME }}
+    IMAGE_TAR_PATH: ${{ github.workspace }}/${{ steps.dockerize.outputs.IMAGE_NAME }}.tar
 ```
 
-`DEPLOY` only needs `IMAGE_NAME` to know which service to swap inside the shared `docker-compose.yml` — it doesn't re-copy or re-load anything, so the Dockerfile/build context don't need to be available in that job.
+`DEPLOY` only needs `IMAGE_TAR_PATH` (its basename, without `.tar`) to know which service to swap inside the shared `docker-compose.yml` — it doesn't re-copy or re-load anything, so the Dockerfile/build context don't need to be available in that job.
 
 ## Optional Parameters
 

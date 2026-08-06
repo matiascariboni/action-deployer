@@ -13,9 +13,9 @@ inputs:
   EC2_KEY:
     required: true
     description: Key to connect to the EC2 Server via SSH
-  IMAGE_NAME:
+  IMAGE_TAR_PATH:
     required: true
-    description: Zipped file with the Docker image to be copied and deployed
+    description: Absolute path to the .tar file with the Docker image to be copied and deployed
   DOCKERFILE_PATH:
     required: false
     description: Relative path to the Dockerfile to parse for ports/networks/volumes (same value passed to action-dockerization)
@@ -44,7 +44,7 @@ runs:
         EC2_IP: ${{ inputs.EC2_IP }}
         EC2_USER: ${{ inputs.EC2_USER }}
         EC2_KEY: ${{ inputs.EC2_KEY }}
-        IMAGE_NAME: ${{ inputs.IMAGE_NAME }}
+        IMAGE_TAR_PATH: ${{ inputs.IMAGE_TAR_PATH }}
         DOCKERFILE_PATH: ${{ inputs.DOCKERFILE_PATH }}
         ACTION: ${{ inputs.ACTION }}
 
@@ -105,13 +105,13 @@ runs:
       run: |
         if [ "${{ inputs.METHOD }}" != "EC2" ]; then exit 0; fi
 
-        if [ ! -f "${{ inputs.IMAGE_NAME }}.tar" ]; then
-          echo "❌ Image file not found: ${{ inputs.IMAGE_NAME }}.tar"
+        if [ ! -f "${{ inputs.IMAGE_TAR_PATH }}" ]; then
+          echo "❌ Image file not found: ${{ inputs.IMAGE_TAR_PATH }}"
           exit 1
         fi
 
         echo "Copying image to EC2..."
-        scp -i server_key.pem -o StrictHostKeyChecking=no ${{ inputs.IMAGE_NAME }}.tar ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
+        scp -i server_key.pem -o StrictHostKeyChecking=no "${{ inputs.IMAGE_TAR_PATH }}" ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }}:/root/
         if [ $? -ne 0 ]; then
           echo "❌ SCP failed"
           exit 1
@@ -123,7 +123,7 @@ runs:
           COMPOSE_NETWORKS='${{ steps.net_formatter.outputs.COMPOSE_NETWORKS }}' \
           COMPOSE_VOLUMES='${{ steps.volume_formatter.outputs.COMPOSE_VOLUMES }}' \
           COMPOSE_FILE_NAME='${{ steps.dockerfile_config.outputs.COMPOSE_FILE_NAME }}' \
-          IMAGE_NAME='${{ inputs.IMAGE_NAME }}.tar' \
+          IMAGE_NAME='$(basename "${{ inputs.IMAGE_TAR_PATH }}")' \
           bash -s" < ${{ github.action_path }}/scripts/ec2_deliver.sh
 
         if [ $? -ne 0 ]; then
@@ -142,7 +142,7 @@ runs:
         echo "Deploying..."
         ssh -i server_key.pem -o StrictHostKeyChecking=no ${{ inputs.EC2_USER }}@${{ inputs.EC2_IP }} \
           "COMPOSE_FILE_NAME='${{ steps.dockerfile_config.outputs.COMPOSE_FILE_NAME }}' \
-          SERVICE_NAME='${{ inputs.IMAGE_NAME }}' \
+          SERVICE_NAME='$(basename "${{ inputs.IMAGE_TAR_PATH }}" .tar)' \
           bash -s" < ${{ github.action_path }}/scripts/ec2_deploy_run.sh
 
         if [ $? -ne 0 ]; then
